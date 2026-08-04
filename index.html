@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confronto Abissal — Meu Perfil</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .char-row{ display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px;
+    background:rgba(255,255,255,0.03); margin-bottom:8px; }
+  .char-row .char-name{ flex:1; font-size:14px; }
+  .constel-select{ background:var(--void-0); border:1px solid var(--line); color:var(--ink);
+    padding:6px 8px; border-radius:8px; font-family:'Cinzel'; font-size:12px; }
+  .btn-remove{ background:transparent; border:1px solid var(--line); color:var(--danger);
+    width:30px; height:30px; border-radius:8px; cursor:pointer; }
+  .add-row{ display:flex; gap:10px; margin-top:14px; }
+  .add-row select{ flex:1; }
+  .hint{ font-size:12.5px; color:var(--ink-faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div><h1>Confronto Abissal</h1><p>Perfil do Viajante</p></div>
+    </div>
+    <div class="navlinks">
+      <a href="index.html" class="active">Perfil</a>
+      <a href="draft.html">Draft</a>
+    </div>
+  </div>
+
+  <!-- LOGIN / CADASTRO -->
+  <section id="authBox" class="panel" style="max-width:420px; margin:0 auto;">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright); margin-bottom:18px;">Acessar Conta</h2>
+    <form id="authForm" data-mode="signup">
+      <div class="field" id="usernameField" style="margin-bottom:14px;">
+        <label>Nome de exibição</label>
+        <input type="text" id="authUsername" placeholder="Como quer ser chamado">
+      </div>
+      <div class="field" style="margin-bottom:14px;">
+        <label>E-mail</label>
+        <input type="email" id="authEmail" required>
+      </div>
+      <div class="field" style="margin-bottom:18px;">
+        <label>Senha</label>
+        <input type="password" id="authPassword" required minlength="6">
+      </div>
+      <button type="submit" class="btn btn-primary" id="authSubmitBtn" style="width:100%;">Criar conta</button>
+      <div class="msg" id="authMsg"></div>
+    </form>
+    <div class="center-actions">
+      <button type="button" class="btn btn-ghost" id="toggleModeBtn">Já tem conta? Entrar</button>
+    </div>
+  </section>
+
+  <!-- PERFIL -->
+  <section id="profileBox" class="hidden">
+    <div class="panel">
+      <div class="top" style="margin-bottom:0;">
+        <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Olá, <span id="welcomeName"></span></h2>
+        <button class="btn btn-ghost" id="logoutBtn">Sair</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 class="font-display" style="font-size:15px; margin-bottom:14px;">Meus Personagens &amp; Constelações</h3>
+      <div id="myCharList"></div>
+      <div class="add-row">
+        <select id="addCharSelect"><option value="">Selecione um personagem…</option></select>
+        <button class="btn btn-primary" id="addCharBtn">Adicionar</button>
+      </div>
+      <div class="msg" id="profileMsg"></div>
+      <div class="rules-box">
+        Esta lista é só sua — visível apenas para você. A pontuação de cada personagem e arma é definida pelo administrador na planilha e usada na tela de <b>Draft</b>.
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/sheets.js"></script>
+<script src="js/auth.js"></script>
+</body>
+</html>
