@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confronto Abissal — Painel do Admin</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .tabs{ display:flex; gap:10px; margin-bottom:18px; }
+  .tab-btn{ font-family:'Cinzel'; font-size:12.5px; letter-spacing:0.08em; text-transform:uppercase;
+    padding:9px 18px; border-radius:999px; border:1px solid var(--line); background:transparent; color:var(--ink-dim); cursor:pointer; }
+  .tab-btn.active{ color:var(--gold-bright); border-color:var(--gold); background:rgba(201,169,97,0.08); }
+
+  .admin-table{ width:100%; border-collapse:collapse; margin-top:12px; }
+  .admin-table th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-faint);
+    padding:8px 6px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--void-1); }
+  .admin-table td{ padding:6px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+  .admin-table tr:hover td{ background:rgba(255,255,255,0.02); }
+  .admin-row-name{ display:flex; align-items:center; gap:10px; min-width:170px; }
+  .admin-row-name img{ width:30px; height:30px; border-radius:6px; object-fit:cover; }
+  .admin-row-name .rarity{ font-size:10.5px; color:var(--gold-bright); }
+  .cost-input{ width:64px; background:var(--void-0); border:1px solid var(--line); color:var(--ink);
+    border-radius:6px; padding:5px 6px; font-size:12.5px; text-align:center; }
+  .cost-input:focus{ border-color:var(--gold); }
+  .cost-input.saved{ border-color:var(--ok); }
+  .cost-input.erro{ border-color:var(--danger); }
+  .table-wrap{ max-height:70vh; overflow:auto; border:1px solid var(--line); border-radius:12px; }
+  #adminSearch{ max-width:320px; }
+  .save-flash{ font-size:11px; color:var(--ok); margin-left:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div><h1>Confronto Abissal</h1><p>Painel do Admin</p></div>
+    </div>
+    <div class="navlinks">
+      <a href="index.html">Perfil</a>
+      <a href="draft.html">Draft</a>
+      <a href="admin.html" class="active">Admin</a>
+    </div>
+  </div>
+
+  <section id="loadingBox" class="panel">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Carregando…</h2>
+    <p class="hint">Buscando personagens e armas na planilha…</p>
+  </section>
+
+  <section id="notAuthorized" class="panel hidden">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Acesso restrito</h2>
+    <p class="hint" style="margin:10px 0 16px;">Essa página é só para o administrador. Se você acha que deveria ter acesso, confirme que a coluna <code>IsAdmin</code> está <code>TRUE</code> na sua linha da aba <code>Usuarios</code>.</p>
+    <div class="center-actions"><a href="index.html" class="btn btn-primary">Voltar ao Perfil</a></div>
+  </section>
+
+  <section id="adminPanel" class="panel hidden">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Pontuação por Constelação / Refinamento</h2>
+    <p class="hint" style="margin:8px 0 18px;">Edite o valor de cada nível — a mudança salva sozinha assim que você sai do campo. Personagens usam constelação (C0–C6); armas usam refinamento (R1–R5).</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tabChars">Personagens</button>
+      <button class="tab-btn" id="tabWeapons">Armas</button>
+    </div>
+
+    <div class="field" id="adminSearch">
+      <input type="text" id="adminSearchInput" placeholder="Buscar por nome…">
+    </div>
+
+    <div class="table-wrap">
+      <table class="admin-table" id="charsTable">
+        <thead>
+          <tr>
+            <th>Personagem</th>
+            <th>C0</th><th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th><th>C6</th>
+          </tr>
+        </thead>
+        <tbody id="charsBody"></tbody>
+      </table>
+
+      <table class="admin-table hidden" id="weaponsTable">
+        <thead>
+          <tr>
+            <th>Arma</th>
+            <th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>R5</th>
+          </tr>
+        </thead>
+        <tbody id="weaponsBody"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+<script src="js/config.js"></script>
+<script src="js/auth-client.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>
