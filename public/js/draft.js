@@ -3,6 +3,8 @@ const ELEMENTS = {
   Pyro:'--pyro', Hydro:'--hydro', Electro:'--electro', Cryo:'--cryo',
   Anemo:'--anemo', Geo:'--geo', Dendro:'--dendro'
 };
+const CHAR_LEVELS = [0,1,2,3,4,5,6];
+const WEAPON_LEVELS = [1,2,3,4,5];
 
 let CHARACTERS = [];
 let WEAPONS = [];
@@ -85,23 +87,35 @@ function advancePhaseIfNeeded(estado){
   return estado;
 }
 
-function applyPick(estado, playerIdx, itemId){
+function levelKeyFor(phase, level){
+  return phase==='weapons' ? ('R'+level) : ('C'+level);
+}
+
+function levelLabelFor(phase, level){
+  return phase==='weapons' ? ('R'+level) : ('C'+level);
+}
+
+function applyPick(estado, playerIdx, itemId, level){
   const poolKey = estado.phase==='weapons' ? 'weapons' : 'characters';
   const idx = estado.pool[poolKey].findIndex(i=>i.id===itemId);
   if(idx===-1) throw new Error('Item não encontrado.');
   const item = estado.pool[poolKey][idx];
-  if(item.cost > estado.players[playerIdx].points) throw new Error('Pontos insuficientes.');
+  const levelKey = levelKeyFor(estado.phase, level);
+  const cost = item.costs[levelKey];
+  if(cost === undefined) throw new Error('Nível inválido.');
+  if(cost > estado.players[playerIdx].points) throw new Error('Pontos insuficientes.');
   if(item.rarity===5 && estado.globalFiveStarUsed >= CFG.fiveCap) throw new Error('Limite de armas 5★ atingido.');
 
   estado.pool[poolKey].splice(idx,1);
-  estado.players[playerIdx].points -= item.cost;
-  if(estado.phase==='weapons') estado.players[playerIdx].picksWeapon.push(item);
-  else estado.players[playerIdx].picksChar.push(item);
+  estado.players[playerIdx].points -= cost;
+  const picked = { id:item.id, name:item.name, element:item.element, rarity:item.rarity, image:item.image, level, cost };
+  if(estado.phase==='weapons') estado.players[playerIdx].picksWeapon.push(picked);
+  else estado.players[playerIdx].picksChar.push(picked);
   if(item.rarity===5 && estado.phase==='weapons'){
     estado.globalFiveStarUsed++;
     estado.players[playerIdx].fiveStar++;
   }
-  estado.log.push({player:playerIdx, name:pname(playerIdx), text:`escolheu ${item.name} (${item.cost} pts)`});
+  estado.log.push({player:playerIdx, name:pname(playerIdx), text:`escolheu ${item.name} (${levelLabelFor(estado.phase,level)} · ${cost} pts)`});
   return advancePhaseIfNeeded(estado);
 }
 
@@ -136,7 +150,7 @@ function renderSidePanels(){
         const it = allPicks[i];
         const chip = document.createElement('div');
         chip.className = 'pick-chip ' + rarityClass(it.rarity);
-        chip.innerHTML = `${imgTag(it,22)}<span>${it.name}</span><span class="cost">${it.cost}</span>`;
+        chip.innerHTML = `${imgTag(it,22)}<span>${it.name} <b style="color:var(--gold-bright);">${levelLabelFor(it.kind==='weapon'?'weapons':'characters', it.level)}</b></span><span class="cost">${it.cost}</span>`;
         list.appendChild(chip);
       } else {
         const slot = document.createElement('div');
@@ -164,16 +178,19 @@ function renderGrid(){
   const activePlayer = ST.order[ST.turnIdx];
   const budgetLeft = ST.players[activePlayer].points;
   const notMyTurn = activePlayer !== myPlayerIndex;
+  const levels = ST.phase==='weapons' ? WEAPON_LEVELS : CHAR_LEVELS;
+  const cheapestCost = it => Math.min(...levels.map(lvl => it.costs[levelKeyFor(ST.phase, lvl)]));
 
   let items = currentPool().filter(it => it.name.toLowerCase().includes(search));
-  if(sort==='cost-desc') items.sort((a,b)=>b.cost-a.cost);
-  else if(sort==='cost-asc') items.sort((a,b)=>a.cost-b.cost);
+  if(sort==='cost-desc') items.sort((a,b)=>cheapestCost(b)-cheapestCost(a));
+  else if(sort==='cost-asc') items.sort((a,b)=>cheapestCost(a)-cheapestCost(b));
   else items.sort((a,b)=>a.name.localeCompare(b.name));
 
   grid.innerHTML = '';
   items.forEach(it=>{
+    const minCost = cheapestCost(it);
     const fiveStarBlocked = (it.rarity===5 && ST.globalFiveStarUsed >= CFG.fiveCap);
-    const cantAfford = it.cost > budgetLeft;
+    const cantAfford = minCost > budgetLeft;
     const disabled = fiveStarBlocked || cantAfford || notMyTurn;
 
     const card = document.createElement('div');
@@ -183,11 +200,50 @@ function renderGrid(){
       ${imgTag(it,100)}
       <div style="font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.04em; margin-top:6px;">${elemLabel}</div>
       <span class="iname">${it.name}</span>
-      <div class="imeta"><span class="rarity-tag">${it.rarity}★</span><span class="cost-tag">${it.cost}</span></div>`;
-    if(!disabled) card.addEventListener('click', ()=>makePick(it.id));
+      <div class="imeta"><span class="rarity-tag">${it.rarity}★</span><span class="cost-tag">a partir de ${minCost}</span></div>`;
+    if(!disabled) card.addEventListener('click', ()=>openLevelModal(it));
     grid.appendChild(card);
   });
 }
+
+/* ===================== MODAL: escolher constelação/refinamento ===================== */
+function openLevelModal(item){
+  const activePlayer = ST.order[ST.turnIdx];
+  const budgetLeft = ST.players[activePlayer].points;
+  const levels = ST.phase==='weapons' ? WEAPON_LEVELS : CHAR_LEVELS;
+  const isWeapon = ST.phase==='weapons';
+
+  document.getElementById('levelModalTitle').textContent = item.name;
+  document.getElementById('levelModalHint').textContent = isWeapon
+    ? 'Escolha o refinamento — cada nível custa mais pontos.'
+    : 'Escolha a constelação — cada nível custa mais pontos.';
+
+  const grid = document.getElementById('levelGrid');
+  grid.innerHTML = '';
+  levels.forEach(lvl=>{
+    const key = levelKeyFor(ST.phase, lvl);
+    const cost = item.costs[key];
+    const fiveStarBlocked = (item.rarity===5 && ST.globalFiveStarUsed >= CFG.fiveCap);
+    const cantAfford = cost > budgetLeft;
+    const disabled = fiveStarBlocked || cantAfford;
+
+    const btn = document.createElement('div');
+    btn.className = 'level-btn' + (disabled ? ' disabled' : '');
+    btn.innerHTML = `<div class="lv-label">${levelLabelFor(ST.phase, lvl)}</div><div class="lv-cost">${cost} pts</div>`;
+    if(!disabled) btn.addEventListener('click', ()=>{
+      closeLevelModal();
+      makePick(item.id, lvl);
+    });
+    grid.appendChild(btn);
+  });
+
+  document.getElementById('levelModal').classList.remove('hidden');
+}
+function closeLevelModal(){
+  document.getElementById('levelModal').classList.add('hidden');
+}
+document.getElementById('levelModalCancel').addEventListener('click', closeLevelModal);
+
 
 function renderTurnInfo(){
   const activePlayer = ST.order[ST.turnIdx];
@@ -251,7 +307,7 @@ function renderTimerTick(){
 }
 
 /* ===================== ESCOLHAS / SINCRONIZAÇÃO ===================== */
-async function makePick(itemId){
+async function makePick(itemId, level){
   if(pickInFlight) return;
   const activePlayer = ST.order[ST.turnIdx];
   if(activePlayer !== myPlayerIndex) return;
@@ -260,13 +316,15 @@ async function makePick(itemId){
   const idx = ST.pool[poolKey].findIndex(i=>i.id===itemId);
   if(idx===-1) return;
   const item = ST.pool[poolKey][idx];
-  if(item.cost > ST.players[activePlayer].points) return;
+  const cost = item.costs[levelKeyFor(ST.phase, level)];
+  if(cost === undefined) return;
+  if(cost > ST.players[activePlayer].points) return;
   if(item.rarity===5 && ST.globalFiveStarUsed >= CFG.fiveCap) return;
 
   pickInFlight = true;
   stopTimer();
   try{
-    const newEstado = applyPick(cloneState(ST), activePlayer, itemId);
+    const newEstado = applyPick(cloneState(ST), activePlayer, itemId, level);
     await sendMatchUpdate(newEstado);
   } catch(e){
     document.getElementById('skipNote').textContent = e.message;
@@ -316,6 +374,8 @@ function startPolling(){
       const match = json.match;
 
       if(currentScreen==='waitingRoom'){
+        MATCH = match;
+        renderWaitingRoom();
         if(match.status !== 'aguardando'){
           enterDraftScreen(match);
         }
@@ -331,12 +391,19 @@ function startPolling(){
 }
 function stopPolling(){ if(pollHandle) clearInterval(pollHandle); pollHandle = null; }
 
+function renderWaitingRoom(){
+  document.getElementById('waitingCode').textContent = MATCH.partidaId;
+  document.getElementById('waitingP1').textContent = MATCH.jogador1 ? MATCH.jogador1.nome : 'Aguardando…';
+  document.getElementById('waitingP2').textContent = MATCH.jogador2 ? MATCH.jogador2.nome : 'Aguardando…';
+}
+
 function enterDraftScreen(match){
   MATCH = match;
   CFG = MATCH.config;
   ST = MATCH.estado;
   if(MATCH.jogador1 && MATCH.jogador1.id === ME.id) myPlayerIndex = 0;
   else if(MATCH.jogador2 && MATCH.jogador2.id === ME.id) myPlayerIndex = 1;
+  else myPlayerIndex = null; // admin/organizador acompanha como espectador
 
   if(ST.phase==='summary'){
     showSummaryScreen();
@@ -364,9 +431,9 @@ function showSummaryScreen(){
       <h3 class="${p===0?'p-color-1':'p-color-2'} font-display">${pname(p)}</h3>
       <div class="hint" style="margin-bottom:16px;">${spent} / ${CFG.budget} pontos usados · ${ST.players[p].fiveStar} arma(s) 5★</div>
       <div class="hint" style="text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px;">Personagens</div>
-      ${ST.players[p].picksChar.map(c=>`<div class="sum-item">${imgTag(c,26)}<span>${c.rarity}★ ${c.name}</span><span class="cost">${c.cost}</span></div>`).join('') || '<div class="sum-item">Nenhum</div>'}
+      ${ST.players[p].picksChar.map(c=>`<div class="sum-item">${imgTag(c,26)}<span>${c.rarity}★ ${c.name} <b style="color:var(--gold-bright);">${levelLabelFor('characters',c.level)}</b></span><span class="cost">${c.cost}</span></div>`).join('') || '<div class="sum-item">Nenhum</div>'}
       <div class="hint" style="text-transform:uppercase; letter-spacing:.08em; margin:14px 0 8px;">Armas</div>
-      ${ST.players[p].picksWeapon.map(w=>`<div class="sum-item">${imgTag(w,26)}<span>${w.rarity}★ ${w.name}</span><span class="cost">${w.cost}</span></div>`).join('') || '<div class="sum-item">Nenhuma</div>'}
+      ${ST.players[p].picksWeapon.map(w=>`<div class="sum-item">${imgTag(w,26)}<span>${w.rarity}★ ${w.name} <b style="color:var(--gold-bright);">${levelLabelFor('weapons',w.level)}</b></span><span class="cost">${w.cost}</span></div>`).join('') || '<div class="sum-item">Nenhuma</div>'}
     `;
     grid.appendChild(col);
   }
@@ -457,8 +524,8 @@ document.getElementById('createBtn').addEventListener('click', async ()=>{
     if(!matchJson.ok) throw new Error(matchJson.msg);
 
     MATCH = matchJson.match;
-    myPlayerIndex = 0;
-    document.getElementById('waitingCode').textContent = MATCH.partidaId;
+    myPlayerIndex = null; // admin acompanha como espectador — não ocupa vaga de jogador
+    renderWaitingRoom();
     showOnly('waitingRoom');
     startPolling();
   } catch(e){
@@ -479,7 +546,18 @@ document.getElementById('joinBtn').addEventListener('click', async ()=>{
     });
     const json = await res.json();
     if(!json.ok) throw new Error(json.msg);
-    enterDraftScreen(json.match);
+
+    // 'espectador' = o próprio admin reabrindo a tela da partida que criou.
+    myPlayerIndex = json.papel==='jogador1' ? 0 : json.papel==='jogador2' ? 1 : null;
+    MATCH = json.match;
+
+    if(MATCH.status === 'aguardando'){
+      renderWaitingRoom();
+      showOnly('waitingRoom');
+      startPolling();
+    } else {
+      enterDraftScreen(MATCH);
+    }
   } catch(e){
     showMsg(msgEl, e.message, 'error');
   }
@@ -510,7 +588,10 @@ async function boot(){
   document.getElementById('meName').textContent = ME.username || ME.email;
   document.getElementById('phasePill').textContent = 'Configuração';
 
-  if(!ME.isAdmin){
+  if(ME.isAdmin){
+    const link = document.getElementById('navAdminLink');
+    if(link) link.classList.remove('hidden');
+  } else {
     document.getElementById('chooseCreate').classList.add('hidden');
     document.getElementById('notAdminNote').textContent = 'Só o administrador cria partidas — peça o código a ele.';
   }
