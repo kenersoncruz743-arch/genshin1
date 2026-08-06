@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confronto Abissal — Draft</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+.players-row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:8px; }
+.p-color-1{ color: var(--hydro); } .p-color-2{ color: var(--pyro); }
+.grid-setup{ display:grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap:16px; margin: 22px 0; }
+
+.draft-layout{ display:grid; grid-template-columns: 250px 1fr 250px; gap:18px; align-items:start; }
+@media (max-width:920px){ .draft-layout{ grid-template-columns:1fr; } .side-panel{ order:2; } .board-panel{ order:1; } }
+
+.side-panel .p-name{ font-family:'Cinzel'; font-size:16px; font-weight:700; margin-bottom:4px; }
+.side-panel .p-points{ font-size:26px; font-weight:800; font-family:'Cinzel'; margin-bottom:2px; }
+.side-panel .p-points-label{ font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:14px; }
+.turn-active{ border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 26px rgba(201,169,97,0.18); }
+
+.pick-list{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+.pick-chip{ display:flex; align-items:center; gap:8px; font-size:12.5px; padding:6px 9px; border-radius:8px;
+  background:rgba(255,255,255,0.03); border-left:3px solid var(--ink-faint); }
+.pick-chip img{ width:22px; height:22px; border-radius:5px; object-fit:cover; }
+.pick-chip.r5{ border-left-color: var(--r5-a); } .pick-chip.r4{ border-left-color: var(--r4-a); }
+.pick-chip .cost{ margin-left:auto; color:var(--ink-faint); font-family:'Cinzel'; font-size:11px; }
+.empty-slot{ font-size:12px; color:var(--ink-faint); padding:7px 9px; border:1px dashed var(--line); border-radius:8px; }
+
+.fivestar-track{ margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+.fivestar-track .lbl{ font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
+.dots{ display:flex; gap:6px; }
+.dot{ width:14px; height:14px; border-radius:3px; border:1px solid var(--r5-b); transform:rotate(45deg); }
+.dot.filled{ background: var(--r5-a); box-shadow:0 0 8px rgba(240,207,126,0.6); }
+
+.board-panel{ text-align:center; padding-top:26px; }
+.turn-title{ font-size:13px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:14px;}
+.turn-title b{ color:var(--gold-bright); }
+.ring-wrap{ position:relative; width:150px; height:150px; margin:0 auto 16px; }
+.ring-wrap svg{ transform:rotate(-90deg); width:150px; height:150px; }
+.ring-bg{ fill:none; stroke: rgba(255,255,255,0.06); stroke-width:8; }
+.ring-fg{ fill:none; stroke-width:8; stroke-linecap:round; transition: stroke-dashoffset 1s linear, stroke .3s ease; }
+.ring-time{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'Cinzel'; font-size:38px; font-weight:700; }
+.phase-caption{ font-size:12.5px; color:var(--ink-faint); margin-bottom:22px; }
+.toolbar{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; justify-content:center; }
+.toolbar input[type=text]{ background:var(--void-0); border:1px solid var(--line); color:var(--ink);
+  padding:9px 14px; border-radius:9px; font-size:13.5px; min-width:180px; outline:none; }
+.toolbar select{ background:var(--void-0); border:1px solid var(--line); color:var(--ink-dim);
+  padding:9px 12px; border-radius:9px; font-size:13px; outline:none; }
+
+.item-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(126px,1fr)); gap:12px;
+  max-height:560px; overflow-y:auto; padding:4px 6px 4px 2px; }
+.item-grid::-webkit-scrollbar{ width:6px; }
+.item-grid::-webkit-scrollbar-thumb{ background: var(--void-3); border-radius:3px; }
+.item-card{ position:relative; border-radius:12px; padding:10px 10px 10px; background: var(--void-2);
+  border:1px solid var(--line); cursor:pointer; text-align:left; transition: transform .12s ease, border-color .12s ease; }
+.item-card:hover:not(.disabled){ transform: translateY(-3px); border-color: var(--gold); }
+.item-card.r5{ background: linear-gradient(160deg, rgba(240,207,126,0.10), var(--void-2) 60%); border-color: rgba(240,207,126,0.35); }
+.item-card.r4{ background: linear-gradient(160deg, rgba(214,179,240,0.08), var(--void-2) 60%); border-color: rgba(214,179,240,0.25); }
+.item-card.disabled{ opacity:0.32; cursor:not-allowed; filter:grayscale(0.6); }
+.item-card .elem-dot{ width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle; }
+.item-card .iname{ font-size:13px; font-weight:700; line-height:1.25; display:block; margin-top:6px; min-height:32px; }
+.item-card .imeta{ display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
+.item-card .rarity-tag{ font-family:'Cinzel'; font-size:10px; letter-spacing:0.05em; }
+.item-card.r5 .rarity-tag{ color: var(--r5-a); } .item-card.r4 .rarity-tag{ color: var(--r4-a); } .item-card.r3 .rarity-tag{ color: var(--r3-a); }
+.item-card .cost-tag{ font-family:'Cinzel'; font-weight:700; font-size:14px; color:var(--gold-bright); }
+
+.log-panel{ margin-top:18px; text-align:left; }
+.log-panel .lbl{ font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px; }
+.log-entry{ font-size:12.5px; color:var(--ink-dim); padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
+.log-entry .who1{ color:var(--hydro); } .log-entry .who2{ color:var(--pyro); }
+
+.summary-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+@media (max-width:760px){ .summary-grid{ grid-template-columns:1fr; } }
+.sum-item{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:9px; background:rgba(255,255,255,0.03); margin-bottom:6px; font-size:13.5px; }
+.sum-item img{ width:26px; height:26px; border-radius:6px; object-fit:cover; }
+.sum-item .cost{ margin-left:auto; font-family:'Cinzel'; color:var(--gold-bright); font-size:12.5px; }
+.skip-note{ font-size:12px; color:var(--danger); margin-top:8px; height:16px; }
+
+.mode-choice{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0; }
+@media (max-width:700px){ .mode-choice{ grid-template-columns:1fr; } }
+.mode-card{ border:1px solid var(--line); border-radius:12px; padding:18px; text-align:center; cursor:pointer; background:var(--void-2); transition:border-color .12s ease; }
+.mode-card:hover{ border-color:var(--gold); }
+.mode-card h3{ font-family:'Cinzel'; font-size:15px; color:var(--gold-bright); margin-bottom:6px; }
+.mode-card p{ font-size:12.5px; color:var(--ink-faint); }
+
+.code-display{ font-family:'Cinzel'; font-size:34px; font-weight:800; letter-spacing:0.15em; color:var(--gold-bright); text-align:center; padding:18px; border:1px dashed var(--gold); border-radius:12px; margin:16px 0; }
+.waiting-dots::after{ content:'…'; animation: dots 1.2s steps(4,end) infinite; }
+@keyframes dots{ 0%,20%{content:'';} 40%{content:'.';} 60%{content:'..';} 80%,100%{content:'...';} }
+
+.admin-score-panel{ margin-top:22px; padding-top:18px; border-top:1px solid var(--line); }
+.admin-score-panel .grid-setup{ margin:14px 0; }
+.final-score-banner{ text-align:center; padding:16px; margin-bottom:20px; border-radius:12px; border:1px solid var(--gold); background:rgba(201,169,97,0.08); }
+.final-score-banner .fs-points{ font-family:'Cinzel'; font-size:28px; font-weight:800; color:var(--gold-bright); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div><h1>Confronto Abissal</h1><p>Sistema de Draft &amp; Pontuação</p></div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="navlinks"><a href="index.html">Perfil</a><a href="draft.html" class="active">Draft</a></div>
+      <div class="phase-pill" id="phasePill">Carregando...</div>
+    </div>
+  </div>
+
+  <section id="loadingBox" class="panel">
+    <p class="hint" style="color:var(--ink-dim);">Buscando personagens e armas na planilha…</p>
+  </section>
+
+  <section id="loadError" class="panel hidden">
+    <p style="color:var(--danger);" id="loadErrorText"></p>
+  </section>
+
+  <section id="authRequired" class="panel hidden">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Entre na sua conta</h2>
+    <p class="hint" style="margin:10px 0 16px;">Você precisa estar logado pra criar ou entrar numa partida de draft.</p>
+    <div class="center-actions"><a href="index.html" class="btn btn-primary">Ir para o Perfil</a></div>
+  </section>
+
+  <!-- ESCOLHA: criar partida ou entrar com código -->
+  <section id="modeChoice" class="panel hidden">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Preparar a Descida</h2>
+    <p class="hint" style="margin-top:8px;">Logado como <b id="meName"></b>.</p>
+    <div class="mode-choice">
+      <div class="mode-card" id="chooseCreate">
+        <h3>Criar Partida</h3>
+        <p>Você define as regras e vira o Jogador 1. Vai gerar um código pra compartilhar com o outro jogador.</p>
+      </div>
+      <div class="mode-card" id="chooseJoin">
+        <h3>Entrar com Código</h3>
+        <p>Alguém já criou a partida e te passou um código de 6 letras/números.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CRIAR PARTIDA -->
+  <section id="createForm" class="panel hidden">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Criar Partida</h2>
+    <div class="grid-setup">
+      <div class="field"><label>Pontuação por jogador</label><input type="number" id="cfgBudget" value="550" min="50" step="10"></div>
+      <div class="field"><label>Personagens por jogador</label><input type="number" id="cfgChars" value="4" min="1" max="12"></div>
+      <div class="field"><label>Armas por jogador</label><input type="number" id="cfgWeapons" value="4" min="1" max="12"></div>
+      <div class="field"><label>Limite de armas 5★ (total da partida)</label><input type="number" id="cfgFiveStar" value="5" min="0" max="20"></div>
+      <div class="field"><label>Tempo por escolha (segundos)</label><input type="number" id="cfgTimer" value="45" min="10" max="180"></div>
+    </div>
+    <div class="rules-box">
+      <b>Como funciona:</b> o draft acontece em duas fases — primeiro os <b>personagens</b>, depois as <b>armas</b> — em ordem serpente. Cada escolha consome pontos do orçamento total. Itens escolhidos saem do pool. Armas 5★ são limitadas ao valor definido acima. Estourou o tempo? A vez passa automaticamente. A pontuação final só o administrador lança.
+    </div>
+    <div class="msg" id="createMsg"></div>
+    <div class="center-actions">
+      <button class="btn btn-ghost" id="backFromCreate">Voltar</button>
+      <button class="btn btn-primary" id="createBtn">Criar Partida</button>
+    </div>
+  </section>
+
+  <!-- ENTRAR COM CÓDIGO -->
+  <section id="joinForm" class="panel hidden">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Entrar com Código</h2>
+    <div class="field" style="max-width:260px; margin:16px auto;">
+      <label>Código da partida</label>
+      <input type="text" id="joinCode" maxlength="6" style="text-transform:uppercase; text-align:center; letter-spacing:0.2em; font-family:'Cinzel'; font-size:20px;">
+    </div>
+    <div class="msg" id="joinMsg"></div>
+    <div class="center-actions">
+      <button class="btn btn-ghost" id="backFromJoin">Voltar</button>
+      <button class="btn btn-primary" id="joinBtn">Entrar</button>
+    </div>
+  </section>
+
+  <!-- SALA DE ESPERA -->
+  <section id="waitingRoom" class="panel hidden">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright); text-align:center;">Aguardando o outro jogador<span class="waiting-dots"></span></h2>
+    <div class="code-display" id="waitingCode"></div>
+    <p class="hint" style="text-align:center;">Compartilhe esse código com o outro jogador. A partida começa sozinha assim que ele entrar.</p>
+  </section>
+
+  <section id="draft" class="hidden">
+    <div class="draft-layout">
+      <div class="panel side-panel" id="panelP1">
+        <div class="p-name p-color-1" id="dispName1">Jogador 1</div>
+        <div class="p-points" id="dispPoints1">550</div>
+        <div class="p-points-label">pontos restantes</div>
+        <div class="pick-list" id="picksP1"></div>
+        <div class="fivestar-track"><div class="lbl">Armas 5★ no time</div><div class="dots" id="fsP1"></div></div>
+      </div>
+
+      <div class="panel board-panel">
+        <div class="turn-title" id="turnTitle">Vez de <b>Jogador 1</b></div>
+        <div class="ring-wrap">
+          <svg viewBox="0 0 150 150">
+            <circle class="ring-bg" cx="75" cy="75" r="66"></circle>
+            <circle class="ring-fg" id="ringFg" cx="75" cy="75" r="66"></circle>
+          </svg>
+          <div class="ring-time" id="ringTime">45</div>
+        </div>
+        <div class="phase-caption" id="phaseCaption">Fase 1 · Escolha de Personagens</div>
+        <div class="skip-note" id="skipNote"></div>
+        <div class="toolbar">
+          <input type="text" id="searchBox" placeholder="Buscar...">
+          <select id="sortBox">
+            <option value="cost-desc">Custo: maior primeiro</option>
+            <option value="cost-asc">Custo: menor primeiro</option>
+            <option value="name">Nome A–Z</option>
+          </select>
+        </div>
+        <div class="item-grid" id="itemGrid"></div>
+        <div class="log-panel"><div class="lbl">Histórico</div><div id="logList"></div></div>
+      </div>
+
+      <div class="panel side-panel" id="panelP2">
+        <div class="p-name p-color-2" id="dispName2">Jogador 2</div>
+        <div class="p-points" id="dispPoints2">550</div>
+        <div class="p-points-label">pontos restantes</div>
+        <div class="pick-list" id="picksP2"></div>
+        <div class="fivestar-track"><div class="lbl">Armas 5★ no time</div><div class="dots" id="fsP2"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="summary" class="hidden panel">
+    <h2 class="font-display" style="font-size:20px; color:var(--gold-bright); text-align:center; margin-bottom:24px;">Times Prontos para o Abismo</h2>
+
+    <div id="finalScoreBanner" class="final-score-banner hidden">
+      <div class="hint" style="text-transform:uppercase; letter-spacing:0.08em;">Pontuação Final (lançada pelo administrador)</div>
+      <div class="fs-points" id="finalScoreText"></div>
+      <div class="hint" id="finalScoreWinner" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="summary-grid" id="summaryGrid"></div>
+
+    <div id="adminScorePanel" class="admin-score-panel hidden">
+      <h3 class="font-display" style="font-size:15px; color:var(--gold-bright);">Lançar Pontuação Final (admin)</h3>
+      <div class="grid-setup">
+        <div class="field"><label id="adminScoreLabel1">Pontos — Jogador 1</label><input type="number" id="adminScoreJ1"></div>
+        <div class="field"><label id="adminScoreLabel2">Pontos — Jogador 2</label><input type="number" id="adminScoreJ2"></div>
+        <div class="field">
+          <label>Vencedor</label>
+          <select id="adminScoreWinner">
+            <option value="">Empate / não definir</option>
+          </select>
+        </div>
+      </div>
+      <div class="msg" id="adminScoreMsg"></div>
+      <div class="center-actions"><button class="btn btn-primary" id="adminScoreBtn">Salvar Pontuação Final</button></div>
+    </div>
+
+    <div class="center-actions"><button class="btn btn-ghost" id="restartBtn">Novo Draft</button></div>
+  </section>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/auth-client.js"></script>
+<script src="js/sheets.js"></script>
+<script src="js/draft.js"></script>
+</body>
+</html>
