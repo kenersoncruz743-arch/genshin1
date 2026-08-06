@@ -1,0 +1,374 @@
+// lib/sheets.js
+// Roda SOMENTE no servidor (dentro das Netlify Functions em netlify/functions/api.js).
+// Nunca é enviado ao navegador — por isso é seguro usar a chave da service
+// account aqui, desde que ela venha de variáveis de ambiente (nunca escrita
+// neste arquivo, nunca commitada no git).
+//
+// Variáveis de ambiente esperadas (configure no painel da Netlify, veja README):
+//   GOOGLE_SHEETS_CLIENT_EMAIL  -> campo "client_email" do JSON da service account
+//   GOOGLE_SHEETS_PRIVATE_KEY   -> campo "private_key" do JSON da service account
+//   GOOGLE_SHEETS_ID            -> ID da planilha (entre /d/ e /edit na URL)
+
+const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+
+const SHEET_USERS = 'Usuarios';
+const SHEET_USER_CHARS = 'PersonagensUsuario';
+const SHEET_CHARACTERS = 'Personagens';
+const SHEET_WEAPONS = 'Armas';
+const SHEET_MATCHES = 'Partidas';
+
+const USERS_HEADER = ['Id', 'Email', 'SenhaHash', 'Username', 'IsAdmin', 'CriadoEm'];
+const MATCHES_HEADER = [
+  'PartidaId', 'Jogador1Id', 'Jogador1Nome', 'Jogador2Id', 'Jogador2Nome',
+  'ConfigJSON', 'EstadoJSON', 'Status', 'Versao',
+  'PontosFinaisJ1', 'PontosFinaisJ2', 'Vencedor', 'CriadaEm', 'AtualizadaEm',
+];
+
+const MATCH_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I, evita confusão
+
+function generateMatchCode() {
+  let code = '';
+  for (let i = 0; i < 6; i++) code += MATCH_CODE_CHARS[Math.floor(Math.random() * MATCH_CODE_CHARS.length)];
+  return code;
+}
+
+class SheetsService {
+  constructor() {
+    this.doc = null;
+    this.initialized = false;
+    this.cache = {};
+    this.cacheTTL = {
+      catalogo: 60 * 1000,
+      default: 30 * 1000,
+    };
+  }
+
+  getCached(key) {
+    const item = this.cache[key];
+    if (!item) return null;
+    const ttl = this.cacheTTL[key.split(':')[0]] || this.cacheTTL.default;
+    if (Date.now() - item.timestamp < ttl) return item.data;
+    delete this.cache[key];
+    return null;
+  }
+
+  setCache(key, data) {
+    this.cache[key] = { data, timestamp: Date.now() };
+  }
+
+  invalidateCache(prefix) {
+    Object.keys(this.cache).forEach(k => {
+      if (!prefix || k.startsWith(prefix)) delete this.cache[k];
+    });
+  }
+
+  async init() {
+    if (this.initialized) return this.doc;
+
+    const email = process.env.GOOGLE_SHEETS_CLIENT_EMAIL;
+    const rawKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY || '';
+    const sheetId = process.env.GOOGLE_SHEETS_ID;
+
+    if (!email || !rawKey || !sheetId) {
+      throw new Error('Variáveis de ambiente do Google Sheets não configuradas (GOOGLE_SHEETS_CLIENT_EMAIL, GOOGLE_SHEETS_PRIVATE_KEY, GOOGLE_SHEETS_ID).');
+    }
+
+    // O Netlify às vezes adiciona aspas extras ou escapa as quebras de linha
+    // da chave privada — isso normaliza os dois casos.
+    const key = rawKey.replace(/^"|"$/g, '').includes('\\n')
+      ? rawKey.replace(/^"|"$/g, '').replace(/\\n/g, '\n')
+      : rawKey.replace(/^"|"$/g, '');
+
+    const serviceAccountAuth = new JWT({
+      email,
+      key,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+
+    this.doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
+    await this.doc.loadInfo();
+    this.initialized = true;
+    return this.doc;
+  }
+
+  async getOrCreateSheet(title, header) {
+    await this.init();
+    let sheet = this.doc.sheetsByTitle[title];
+    if (!sheet) {
+      sheet = await this.doc.addSheet({ title, headerValues: header });
+    }
+    return sheet;
+  }
+
+  // ===== CATÁLOGO DO JOGO (Personagens / Armas) =====
+
+  async getCharacters() {
+    const cacheKey = 'catalogo:personagens';
+    const cached = this.getCached(cacheKey);
+    if (cached) return cached;
+
+    const sheet = await this.getOrCreateSheet(SHEET_CHARACTERS, ['Nome', 'Elemento', 'Raridade', 'Custo', 'ImagemURL']);
+    const rows = await sheet.getRows();
+    const data = rows.map((r, i) => ({
+      id: 'c' + i,
+      name: String(r.get('Nome') || '').trim(),
+      element: String(r.get('Elemento') || '').trim(),
+      rarity: parseInt(r.get('Raridade') || '4', 10),
+      cost: parseInt(r.get('Custo') || '0', 10),
+      image: String(r.get('ImagemURL') || '').trim(),
+    })).filter(c => c.name);
+
+    this.setCache(cacheKey, data);
+    return data;
+  }
+
+  async getWeapons() {
+    const cacheKey = 'catalogo:armas';
+    const cached = this.getCached(cacheKey);
+    if (cached) return cached;
+
+    const sheet = await this.getOrCreateSheet(SHEET_WEAPONS, ['Nome', 'Raridade', 'Custo', 'ImagemURL']);
+    const rows = await sheet.getRows();
+    const data = rows.map((r, i) => ({
+      id: 'w' + i,
+      name: String(r.get('Nome') || '').trim(),
+      rarity: parseInt(r.get('Raridade') || '4', 10),
+      cost: parseInt(r.get('Custo') || '0', 10),
+      image: String(r.get('ImagemURL') || '').trim(),
+    })).filter(w => w.name);
+
+    this.setCache(cacheKey, data);
+    return data;
+  }
+
+  // ===== USUÁRIOS (login/cadastro) =====
+
+  async usersSheet() {
+    return this.getOrCreateSheet(SHEET_USERS, USERS_HEADER);
+  }
+
+  async findUserByEmail(email) {
+    const sheet = await this.usersSheet();
+    const rows = await sheet.getRows();
+    const target = email.trim().toLowerCase();
+    return rows.find(r => String(r.get('Email') || '').trim().toLowerCase() === target) || null;
+  }
+
+  async findUserById(userId) {
+    const sheet = await this.usersSheet();
+    const rows = await sheet.getRows();
+    return rows.find(r => r.get('Id') === userId) || null;
+  }
+
+  isAdminValue(row) {
+    const val = String(row.get('IsAdmin') || '').trim().toUpperCase();
+    return val === 'TRUE' || val === 'SIM' || val === '1' || val === 'X';
+  }
+
+  async isUserAdmin(userId) {
+    const row = await this.findUserById(userId);
+    return row ? this.isAdminValue(row) : false;
+  }
+
+  async signUp({ email, password, username }) {
+    email = String(email || '').trim().toLowerCase();
+    password = String(password || '');
+    username = String(username || '').trim() || email.split('@')[0];
+
+    if (!email || !password) throw new Error('E-mail e senha são obrigatórios.');
+    if (password.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
+
+    const existing = await this.findUserByEmail(email);
+    if (existing) throw new Error('Já existe uma conta com esse e-mail.');
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const id = crypto.randomUUID();
+
+    const sheet = await this.usersSheet();
+    await sheet.addRow({ Id: id, Email: email, SenhaHash: passwordHash, Username: username, IsAdmin: '', CriadoEm: new Date().toISOString() });
+
+    return { id, email, username, isAdmin: false };
+  }
+
+  async logIn({ email, password }) {
+    email = String(email || '').trim().toLowerCase();
+    password = String(password || '');
+
+    const row = await this.findUserByEmail(email);
+    if (!row) throw new Error('E-mail ou senha incorretos.');
+
+    const ok = await bcrypt.compare(password, String(row.get('SenhaHash') || ''));
+    if (!ok) throw new Error('E-mail ou senha incorretos.');
+
+    return { id: row.get('Id'), email: row.get('Email'), username: row.get('Username'), isAdmin: this.isAdminValue(row) };
+  }
+
+  // ===== PERSONAGENS DO USUÁRIO (constelações) =====
+
+  async userCharsSheet() {
+    return this.getOrCreateSheet(SHEET_USER_CHARS, ['UserId', 'Personagem', 'Constelacao', 'AtualizadoEm']);
+  }
+
+  async listUserCharacters(userId) {
+    const sheet = await this.userCharsSheet();
+    const rows = await sheet.getRows();
+    return rows
+      .filter(r => r.get('UserId') === userId)
+      .map(r => ({
+        character_name: r.get('Personagem'),
+        constellation: Number(r.get('Constelacao') || 0),
+      }));
+  }
+
+  async upsertUserCharacter(userId, characterName, constellation) {
+    const sheet = await this.userCharsSheet();
+    const rows = await sheet.getRows();
+    const existing = rows.find(r => r.get('UserId') === userId && r.get('Personagem') === characterName);
+
+    if (existing) {
+      existing.set('Constelacao', constellation);
+      existing.set('AtualizadoEm', new Date().toISOString());
+      await existing.save();
+    } else {
+      await sheet.addRow({
+        UserId: userId,
+        Personagem: characterName,
+        Constelacao: constellation,
+        AtualizadoEm: new Date().toISOString(),
+      });
+    }
+  }
+
+  async deleteUserCharacter(userId, characterName) {
+    const sheet = await this.userCharsSheet();
+    const rows = await sheet.getRows();
+    const existing = rows.find(r => r.get('UserId') === userId && r.get('Personagem') === characterName);
+    if (existing) await existing.delete();
+  }
+
+  // ===== PARTIDAS (draft sincronizado entre dois dispositivos) =====
+
+  async matchesSheet() {
+    return this.getOrCreateSheet(SHEET_MATCHES, MATCHES_HEADER);
+  }
+
+  rowToMatch(row) {
+    return {
+      partidaId: row.get('PartidaId'),
+      jogador1: { id: row.get('Jogador1Id'), nome: row.get('Jogador1Nome') },
+      jogador2: row.get('Jogador2Id') ? { id: row.get('Jogador2Id'), nome: row.get('Jogador2Nome') } : null,
+      config: JSON.parse(row.get('ConfigJSON') || '{}'),
+      estado: JSON.parse(row.get('EstadoJSON') || 'null'),
+      status: row.get('Status'),
+      versao: Number(row.get('Versao') || 1),
+      pontosFinais: {
+        j1: row.get('PontosFinaisJ1') !== '' && row.get('PontosFinaisJ1') != null ? Number(row.get('PontosFinaisJ1')) : null,
+        j2: row.get('PontosFinaisJ2') !== '' && row.get('PontosFinaisJ2') != null ? Number(row.get('PontosFinaisJ2')) : null,
+      },
+      vencedor: row.get('Vencedor') || null,
+      atualizadaEm: row.get('AtualizadaEm'),
+    };
+  }
+
+  async findMatchRow(partidaId) {
+    const sheet = await this.matchesSheet();
+    const rows = await sheet.getRows();
+    const row = rows.find(r => r.get('PartidaId') === String(partidaId || '').toUpperCase());
+    if (!row) throw new Error('Partida não encontrada. Confira o código.');
+    return row;
+  }
+
+  async createMatch({ hostId, hostName, config, estado }) {
+    if (!hostId || !config || !estado) throw new Error('Dados incompletos para criar a partida.');
+    const sheet = await this.matchesSheet();
+    const rows = await sheet.getRows();
+
+    let code;
+    do { code = generateMatchCode(); } while (rows.some(r => r.get('PartidaId') === code));
+
+    const now = new Date().toISOString();
+    await sheet.addRow({
+      PartidaId: code,
+      Jogador1Id: hostId,
+      Jogador1Nome: hostName || 'Jogador 1',
+      Jogador2Id: '',
+      Jogador2Nome: '',
+      ConfigJSON: JSON.stringify(config),
+      EstadoJSON: JSON.stringify(estado),
+      Status: 'aguardando',
+      Versao: 1,
+      PontosFinaisJ1: '',
+      PontosFinaisJ2: '',
+      Vencedor: '',
+      CriadaEm: now,
+      AtualizadaEm: now,
+    });
+
+    return { partidaId: code };
+  }
+
+  async joinMatch({ partidaId, userId, userName }) {
+    const row = await this.findMatchRow(partidaId);
+
+    if (row.get('Jogador1Id') === userId) {
+      return this.rowToMatch(row); // o próprio host reabrindo a tela
+    }
+    if (row.get('Jogador2Id')) {
+      if (row.get('Jogador2Id') === userId) return this.rowToMatch(row); // já tinha entrado
+      throw new Error('Essa partida já tem dois jogadores.');
+    }
+
+    row.set('Jogador2Id', userId);
+    row.set('Jogador2Nome', userName || 'Jogador 2');
+    row.set('Status', 'em_andamento');
+    row.set('AtualizadaEm', new Date().toISOString());
+    await row.save();
+    return this.rowToMatch(row);
+  }
+
+  async getMatch(partidaId) {
+    const row = await this.findMatchRow(partidaId);
+    return this.rowToMatch(row);
+  }
+
+  async updateMatchState({ partidaId, userId, estado, versaoEsperada }) {
+    const row = await this.findMatchRow(partidaId);
+    if (row.get('Jogador1Id') !== userId && row.get('Jogador2Id') !== userId) {
+      throw new Error('Você não faz parte dessa partida.');
+    }
+
+    const versaoAtual = Number(row.get('Versao') || 1);
+    if (Number(versaoEsperada) !== versaoAtual) {
+      // Outro jogador já mandou uma jogada antes — não sobrescreve.
+      return { conflito: true, match: this.rowToMatch(row) };
+    }
+
+    row.set('EstadoJSON', JSON.stringify(estado));
+    row.set('Versao', versaoAtual + 1);
+    row.set('AtualizadaEm', new Date().toISOString());
+    if (estado.phase === 'summary' && row.get('Status') !== 'finalizada') {
+      row.set('Status', 'aguardando_pontuacao');
+    }
+    await row.save();
+    return { conflito: false, match: this.rowToMatch(row) };
+  }
+
+  async setFinalScore({ partidaId, requesterId, pontosJ1, pontosJ2, vencedor }) {
+    const isAdmin = await this.isUserAdmin(requesterId);
+    if (!isAdmin) throw new Error('Só o administrador pode lançar a pontuação final.');
+
+    const row = await this.findMatchRow(partidaId);
+    row.set('PontosFinaisJ1', pontosJ1 == null ? '' : Number(pontosJ1));
+    row.set('PontosFinaisJ2', pontosJ2 == null ? '' : Number(pontosJ2));
+    row.set('Vencedor', vencedor || '');
+    row.set('Status', 'finalizada');
+    row.set('AtualizadaEm', new Date().toISOString());
+    await row.save();
+    return this.rowToMatch(row);
+  }
+}
+
+module.exports = new SheetsService();
