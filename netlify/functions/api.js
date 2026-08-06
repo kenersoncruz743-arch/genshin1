@@ -2,6 +2,7 @@
 const authHandler = require('../../api/auth');
 const personagensHandler = require('../../api/personagens');
 const partidaHandler = require('../../api/partida');
+const adminHandler = require('../../api/admin');
 
 function buildReq(event) {
   const body = event.body
@@ -56,6 +57,8 @@ exports.handler = async (event) => {
       await personagensHandler(req, res);
     } else if (path.startsWith('/partida')) {
       await partidaHandler(req, res);
+    } else if (path.startsWith('/admin')) {
+      await adminHandler(req, res);
     } else {
       return { statusCode: 404, headers, body: JSON.stringify({ ok: false, msg: 'Rota não encontrada: ' + path }) };
     }
