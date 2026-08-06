@@ -75,6 +75,10 @@ async function renderMyCharacterList(userId){
 document.addEventListener('DOMContentLoaded', async () => {
   const session = await getSession();
   if(session) await renderProfile(session);
+  if(session && session.isAdmin){
+    const link = document.getElementById('navAdminLink');
+    if(link) link.classList.remove('hidden');
+  }
 
   document.getElementById('toggleModeBtn').addEventListener('click', () => {
     const isSignup = document.getElementById('authForm').dataset.mode === 'signup';
