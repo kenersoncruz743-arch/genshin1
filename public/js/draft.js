@@ -509,6 +509,12 @@ async function boot(){
 
   document.getElementById('meName').textContent = ME.username || ME.email;
   document.getElementById('phasePill').textContent = 'Configuração';
+
+  if(!ME.isAdmin){
+    document.getElementById('chooseCreate').classList.add('hidden');
+    document.getElementById('notAdminNote').textContent = 'Só o administrador cria partidas — peça o código a ele.';
+  }
+
   showOnly('modeChoice');
 }
 boot();
