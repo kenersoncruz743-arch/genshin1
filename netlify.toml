@@ -1,8 +1,16 @@
 [build]
-  publish = "."
-  command = ""
+  publish = "public"
+  command = "echo 'No build needed'"
+
+[functions]
+  directory = "netlify/functions"
 
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 404
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/draft"
+  to = "/draft.html"
+  status = 200
