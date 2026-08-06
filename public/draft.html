@@ -62,7 +62,7 @@
 .item-card .imeta{ display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
 .item-card .rarity-tag{ font-family:'Cinzel'; font-size:10px; letter-spacing:0.05em; }
 .item-card.r5 .rarity-tag{ color: var(--r5-a); } .item-card.r4 .rarity-tag{ color: var(--r4-a); } .item-card.r3 .rarity-tag{ color: var(--r3-a); }
-.item-card .cost-tag{ font-family:'Cinzel'; font-weight:700; font-size:14px; color:var(--gold-bright); }
+.item-card .cost-tag{ font-family:'Cinzel'; font-weight:700; font-size:11px; color:var(--gold-bright); }
 
 .log-panel{ margin-top:18px; text-align:left; }
 .log-panel .lbl{ font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px; }
@@ -91,6 +91,15 @@
 .admin-score-panel .grid-setup{ margin:14px 0; }
 .final-score-banner{ text-align:center; padding:16px; margin-bottom:20px; border-radius:12px; border:1px solid var(--gold); background:rgba(201,169,97,0.08); }
 .final-score-banner .fs-points{ font-family:'Cinzel'; font-size:28px; font-weight:800; color:var(--gold-bright); }
+
+.modal-overlay{ position:fixed; inset:0; background:rgba(10,6,3,0.78); display:flex; align-items:center; justify-content:center; z-index:80; padding:20px; }
+.modal-box{ background:linear-gradient(180deg, var(--void-2), var(--void-1)); border:1px solid var(--gold); border-radius:16px; padding:26px; max-width:440px; width:100%; }
+.level-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(76px,1fr)); gap:10px; margin:20px 0; }
+.level-btn{ border:1px solid var(--line); border-radius:10px; padding:12px 6px; text-align:center; cursor:pointer; background:var(--void-2); transition:border-color .12s ease; }
+.level-btn:hover:not(.disabled){ border-color:var(--gold); }
+.level-btn.disabled{ opacity:0.32; cursor:not-allowed; }
+.level-btn .lv-label{ font-family:'Cinzel'; font-size:14px; color:var(--gold-bright); font-weight:700; }
+.level-btn .lv-cost{ font-size:11px; color:var(--ink-faint); margin-top:5px; }
 </style>
 </head>
 <body>
@@ -101,7 +110,7 @@
       <div><h1>Confronto Abissal</h1><p>Sistema de Draft &amp; Pontuação</p></div>
     </div>
     <div style="display:flex; align-items:center; gap:12px;">
-      <div class="navlinks"><a href="index.html">Perfil</a><a href="draft.html" class="active">Draft</a></div>
+      <div class="navlinks"><a href="index.html">Perfil</a><a href="draft.html" class="active">Draft</a><a href="admin.html" id="navAdminLink" class="hidden">Admin</a></div>
       <div class="phase-pill" id="phasePill">Carregando...</div>
     </div>
   </div>
@@ -128,11 +137,11 @@
     <div class="mode-choice">
       <div class="mode-card" id="chooseCreate">
         <h3>Criar Partida</h3>
-        <p>Você define as regras e vira o Jogador 1. Vai gerar um código pra compartilhar com o outro jogador. (Só o administrador vê esta opção.)</p>
+        <p>Você define as regras e gera um código pra convidar os dois jogadores. Você acompanha a partida como organizador/espectador — não joga. (Só o administrador vê esta opção.)</p>
       </div>
       <div class="mode-card" id="chooseJoin">
         <h3>Entrar com Código</h3>
-        <p>O administrador já criou a partida e te passou um código de 6 letras/números.</p>
+        <p>O administrador criou a partida e te passou um código de 6 letras/números — entre com ele pra ocupar uma vaga de jogador.</p>
       </div>
     </div>
   </section>
@@ -148,7 +157,7 @@
       <div class="field"><label>Tempo por escolha (segundos)</label><input type="number" id="cfgTimer" value="45" min="10" max="180"></div>
     </div>
     <div class="rules-box">
-      <b>Como funciona:</b> o draft acontece em duas fases — primeiro os <b>personagens</b>, depois as <b>armas</b> — em ordem serpente. Cada escolha consome pontos do orçamento total. Itens escolhidos saem do pool. Armas 5★ são limitadas ao valor definido acima. Estourou o tempo? A vez passa automaticamente. A pontuação final só o administrador lança.
+      <b>Como funciona:</b> o draft acontece em duas fases — primeiro os <b>personagens</b>, depois as <b>armas</b> — em ordem serpente. Ao escolher um item, o jogador também escolhe a constelação (personagens) ou refinamento (armas) — cada nível custa mais pontos, definidos pelo admin no painel. Itens escolhidos saem do pool. Armas 5★ são limitadas ao valor definido acima. Estourou o tempo? A vez passa automaticamente. Você (admin) não joga — só organiza e, no final, lança a pontuação.
     </div>
     <div class="msg" id="createMsg"></div>
     <div class="center-actions">
@@ -173,10 +182,15 @@
 
   <!-- SALA DE ESPERA -->
   <section id="waitingRoom" class="panel hidden">
-    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright); text-align:center;">Aguardando o outro jogador<span class="waiting-dots"></span></h2>
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright); text-align:center;">Aguardando os jogadores<span class="waiting-dots"></span></h2>
     <div class="code-display" id="waitingCode"></div>
-    <p class="hint" style="text-align:center;">Compartilhe esse código com o outro jogador. A partida começa sozinha assim que ele entrar.</p>
+    <p class="hint" style="text-align:center;">Compartilhe esse código com os dois jogadores. A partida começa sozinha assim que os dois entrarem.</p>
+    <div class="grid-setup" style="margin-top:18px;">
+      <div class="field"><label class="p-color-1">Jogador 1</label><div class="hint" id="waitingP1">Aguardando…</div></div>
+      <div class="field"><label class="p-color-2">Jogador 2</label><div class="hint" id="waitingP2">Aguardando…</div></div>
+    </div>
   </section>
+
 
   <section id="draft" class="hidden">
     <div class="draft-layout">
@@ -250,6 +264,16 @@
 
     <div class="center-actions"><button class="btn btn-ghost" id="restartBtn">Novo Draft</button></div>
   </section>
+</div>
+
+<!-- MODAL: escolher constelação (personagens) ou refinamento (armas) -->
+<div id="levelModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 class="font-display" id="levelModalTitle" style="font-size:16px; color:var(--gold-bright); text-align:center;"></h3>
+    <p class="hint" style="text-align:center; margin-top:6px;" id="levelModalHint"></p>
+    <div class="level-grid" id="levelGrid"></div>
+    <div class="center-actions"><button class="btn btn-ghost" id="levelModalCancel">Cancelar</button></div>
+  </div>
 </div>
 
 <script src="js/config.js"></script>
