@@ -12,19 +12,22 @@ confronto-abissal/
 ├── public/                    # tudo que o navegador carrega (site estático)
 │   ├── index.html
 │   ├── draft.html
+│   ├── admin.html              # painel do admin: pontuação por constelação/refinamento
 │   ├── css/style.css
 │   └── js/
 │       ├── config.js           # sem segredos — só configs de UI
 │       ├── auth-client.js      # chama /api/auth e /api/personagens
 │       ├── sheets.js           # busca o catálogo via /api/personagens?tipo=catalogo
 │       ├── auth.js             # lógica da tela de login/perfil
-│       └── draft.js            # lógica do draft
+│       ├── draft.js            # lógica do draft
+│       └── admin.js            # lógica do painel do admin
 ├── lib/
 │   └── sheets.js               # ★ só roda no servidor — fala com a planilha usando a service account
 ├── api/
 │   ├── auth.js                 # handler de signup/login
 │   ├── personagens.js          # handler de catálogo + personagens do usuário
-│   └── partida.js              # handler de criar/entrar/jogar/finalizar partida (draft sincronizado)
+│   ├── partida.js              # handler de criar/entrar/jogar/finalizar partida (draft sincronizado)
+│   └── admin.js                # handler de alterar pontuação por nível (admin-only)
 ├── netlify/functions/api.js    # roteador das Netlify Functions
 ├── netlify.toml
 ├── package.json
@@ -37,10 +40,11 @@ confronto-abissal/
 
 Sua planilha: `https://docs.google.com/spreadsheets/d/1uEyZn8X_QZY8u6CkMFoFr7unbq-HxpX7s9qvHzRTHQw/edit`
 
-1. Crie a aba **`Personagens`** com colunas: `Nome | Elemento | Raridade | Custo | ImagemURL`.
-2. Crie a aba **`Armas`** com colunas: `Nome | Raridade | Custo | ImagemURL`.
-3. **Não é mais necessário** deixar a planilha pública ("Qualquer pessoa com o link"). Em vez disso, compartilhe a planilha diretamente com o e-mail da sua service account (algo como `nome@seu-projeto.iam.gserviceaccount.com`, veja no campo `client_email` do JSON que você baixou do Google Cloud) com papel de **Editor**. Botão **Compartilhar** → cole esse e-mail → **Editor** → **Enviar**.
-4. As abas `Usuarios`, `PersonagensUsuario` e `Partidas` **não precisam ser criadas à mão** — o servidor cria as três sozinho na primeira vez que forem usadas.
+1. Crie a aba **`Personagens`** com colunas: `Nome | Elemento | Raridade | ImagemURL | CustoC0 | CustoC1 | CustoC2 | CustoC3 | CustoC4 | CustoC5 | CustoC6` (um custo pra cada constelação, de C0 a C6).
+2. Crie a aba **`Armas`** com colunas: `Nome | Raridade | ImagemURL | CustoR1 | CustoR2 | CustoR3 | CustoR4 | CustoR5` (um custo pra cada refinamento, de R1 a R5).
+3. Pode deixar as colunas `CustoC*`/`CustoR*` em branco no começo — o sistema usa um valor padrão por raridade até você ajustar. O jeito mais fácil de editar esses valores depois é pelo **painel do admin dentro do site** (seção 1.3), não precisa mexer direto na planilha.
+4. **Não é mais necessário** deixar a planilha pública ("Qualquer pessoa com o link"). Em vez disso, compartilhe a planilha diretamente com o e-mail da sua service account (algo como `nome@seu-projeto.iam.gserviceaccount.com`, veja no campo `client_email` do JSON que você baixou do Google Cloud) com papel de **Editor**. Botão **Compartilhar** → cole esse e-mail → **Editor** → **Enviar**.
+5. As abas `Usuarios`, `PersonagensUsuario` e `Partidas` **não precisam ser criadas à mão** — o servidor cria as três sozinho na primeira vez que forem usadas.
 
 > ⚠️ Sobre a chave que você compartilhou nesta conversa: por segurança, considere-a exposta. Antes de configurar tudo, vá em [Google Cloud Console → IAM e administrador → Contas de serviço](https://console.cloud.google.com/iam-admin/serviceaccounts) → sua service account → aba **Chaves** → **exclua** a chave antiga → **Adicionar chave** → **Criar nova chave (JSON)**. Use somente essa chave nova nos passos abaixo.
 
@@ -48,15 +52,16 @@ Sua planilha: `https://docs.google.com/spreadsheets/d/1uEyZn8X_QZY8u6CkMFoFr7unb
 
 ## 1.1 Draft ao vivo entre dois dispositivos (como funciona)
 
-Dois jogadores logados em aparelhos diferentes (computador, celular, o que for) jogam a **mesma partida** assim:
+Três pessoas participam de cada partida: o **administrador** (organiza, não joga) e **dois jogadores** (os que de fato fazem o draft), cada um no seu próprio aparelho:
 
 1. O **administrador** (quem tem `IsAdmin = TRUE` na aba `Usuarios`, veja 1.2) clica em **Criar Partida**, define as regras (pontos, nº de personagens/armas, limite de 5★, tempo por escolha) e recebe um **código de 6 caracteres**. Jogadores comuns não veem essa opção — só "Entrar com Código".
-2. Ele compartilha esse código com o outro jogador (WhatsApp, por exemplo).
-3. O outro jogador clica em **Entrar com Código**, digita o código, e a partida começa nos dois aparelhos ao mesmo tempo.
-4. Cada escolha feita por um jogador é gravada na aba `Partidas` da planilha; o navegador do outro jogador **consulta a planilha a cada ~2,5 segundos** (polling) e atualiza a tela sozinho — sem precisar recarregar a página.
-5. Só quem está com a vez consegue clicar nos itens; o cronômetro roda baseado no horário salvo no servidor, então funciona igual nos dois aparelhos mesmo que um esteja com internet mais lenta que o outro.
+2. Ele compartilha esse código com os dois jogadores (WhatsApp, por exemplo).
+3. Cada jogador clica em **Entrar com Código** e digita o código. A primeira pessoa a entrar vira **Jogador 1**, a segunda vira **Jogador 2** — a partida só começa de verdade quando as duas vagas estiverem preenchidas.
+4. O administrador acompanha tudo como **espectador**: ele também pode reabrir a tela com o mesmo código (o servidor reconhece que foi ele quem criou a partida e devolve a visão de espectador, sem ocupar nenhuma vaga) pra ver o draft acontecendo em tempo real, mas não consegue clicar em nenhum item.
+5. Cada escolha feita por um jogador é gravada na aba `Partidas` da planilha; os navegadores dos outros dois (o outro jogador + o admin espectando) **consultam a planilha a cada ~2,5 segundos** (polling) e atualizam a tela sozinhos — sem precisar recarregar a página.
+6. Só quem está com a vez consegue clicar nos itens; o cronômetro roda baseado no horário salvo no servidor, então funciona igual em todos os aparelhos mesmo que um esteja com internet mais lenta que o outro.
 
-A aba `Partidas` guarda, entre outras colunas, um `EstadoJSON` (o "save" da partida) e um número de `Versao` que evita que uma jogada antiga sobrescreva uma mais nova por engano — se os dois tentarem jogar ao mesmo tempo, o segundo pedido é rejeitado e o navegador dele se atualiza sozinho com o estado mais recente.
+A aba `Partidas` guarda, entre outras colunas, um `EstadoJSON` (o "save" da partida) e um número de `Versao` que evita que uma jogada antiga sobrescreva uma mais nova por engano — se os dois jogadores tentarem jogar ao mesmo tempo, o segundo pedido é rejeitado e o navegador dele se atualiza sozinho com o estado mais recente.
 
 ## 1.2 Quem pode lançar a pontuação final
 
@@ -66,21 +71,30 @@ Pra virar administrador:
 
 1. Crie sua conta normalmente pelo site.
 2. Abra a aba `Usuarios` na planilha, ache a sua linha (pelo `Email`) e escreva `TRUE` na coluna `IsAdmin`.
-3. Pronto — da próxima vez que você fizer login, o painel de pontuação final aparece pra você.
+3. Pronto — da próxima vez que você fizer login, você vê a opção de **Criar Partida** e, ao final de cada draft, o painel de pontuação.
 
-> Isso é verificado no servidor toda vez que a pontuação é salva (não é só esconder o botão na tela) — mesmo que alguém tente chamar a API na mão, só passa quem tiver `IsAdmin = TRUE` na planilha.
+> Isso é verificado no servidor toda vez que a pontuação (e a criação da partida) é salva — não é só esconder o botão na tela. Mesmo que alguém tente chamar a API na mão, só passa quem tiver `IsAdmin = TRUE` na planilha.
 
-**Limitação atual:** quem cria a partida (o admin) automaticamente vira o **Jogador 1** — ou seja, hoje o admin também precisa ser um dos dois duelistas. Um admin que só organiza partidas entre outras duas pessoas, sem jogar, é algo que dá pra evoluir depois se vocês quiserem (avise que eu ajusto).
+## 1.3 Painel do Admin — pontuação por constelação/refinamento
+
+Quem é admin (passo 1.2) vê um link **"Admin"** no menu, que abre `admin.html`. Lá dá pra definir, personagem por personagem e arma por arma, quanto custa cada nível:
+
+- **Personagens**: um valor pra cada constelação, **C0 a C6** (ex: Hu Tao C0 = 50, Hu Tao C1 = 70…).
+- **Armas**: um valor pra cada refinamento, **R1 a R5**.
+
+Cada campo salva sozinho assim que você sai dele (não precisa de botão "salvar tudo"). Por baixo dos panos isso escreve nas colunas `CustoC0..CustoC6` (aba `Personagens`) e `CustoR1..CustoR5` (aba `Armas`) — ou seja, também dá pra editar em massa direto na planilha do Google se preferir, é a mesma informação.
+
+**No draft**, ao clicar num personagem ou arma, o jogador escolhe o nível (C0–C6 ou R1–R5) num pop-up que mostra o custo de cada um; níveis que estourariam o orçamento restante ou o limite de armas 5★ aparecem desabilitados. O contador de "pontos restantes" de cada jogador (visível o tempo todo na tela do draft) reflete isso em tempo real.
 
 ## Abas da planilha (resumo)
 
 | Aba | Colunas | Criada por |
 |---|---|---|
-| `Personagens` | `Nome, Elemento, Raridade, Custo, ImagemURL` | você |
-| `Armas` | `Nome, Raridade, Custo, ImagemURL` | você |
+| `Personagens` | `Nome, Elemento, Raridade, ImagemURL, CustoC0..CustoC6` | você (custos ajustáveis no painel Admin) |
+| `Armas` | `Nome, Raridade, ImagemURL, CustoR1..CustoR5` | você (custos ajustáveis no painel Admin) |
 | `Usuarios` | `Id, Email, SenhaHash, Username, IsAdmin, CriadoEm` | servidor (automático) |
 | `PersonagensUsuario` | `UserId, Personagem, Constelacao, AtualizadoEm` | servidor (automático) |
-| `Partidas` | `PartidaId, Jogador1Id, Jogador1Nome, Jogador2Id, Jogador2Nome, ConfigJSON, EstadoJSON, Status, Versao, PontosFinaisJ1, PontosFinaisJ2, Vencedor, CriadaEm, AtualizadaEm` | servidor (automático) |
+| `Partidas` | `PartidaId, CriadorId, CriadorNome, Jogador1Id, Jogador1Nome, Jogador2Id, Jogador2Nome, ConfigJSON, EstadoJSON, Status, Versao, PontosFinaisJ1, PontosFinaisJ2, Vencedor, CriadaEm, AtualizadaEm` | servidor (automático) |
 
 ---
 
@@ -150,9 +164,10 @@ Na Netlify:
 2. Confira na planilha se apareceram as abas `Usuarios` (com um hash bcrypt na coluna `SenhaHash`, nunca a senha em texto puro) e `PersonagensUsuario`.
 3. Adicione personagens e defina a constelação de cada um.
 4. Marque `TRUE` na coluna `IsAdmin` da sua linha em `Usuarios` (passo 1.2) pra virar admin.
-5. Vá em **Draft** → **Criar Partida** → configure as regras → compartilhe o código com o outro jogador (em outro aparelho) → ele clica em **Entrar com Código**.
+5. Vá em **Admin** → ajuste alguns custos por constelação/refinamento (passo 1.3) pra ver se salva na planilha.
+6. Vá em **Draft** → **Criar Partida** → configure as regras → compartilhe o código com os dois jogadores (em dois outros aparelhos/contas) → cada um clica em **Entrar com Código**. Você (admin) fica acompanhando como espectador.
 
-Se der erro de "Variáveis de ambiente não configuradas", revise o passo 2. Se der erro de permissão do Google, revise se a planilha foi compartilhada com o `client_email` da service account como Editor (passo 1.3).
+Se der erro de "Variáveis de ambiente não configuradas", revise o passo 2. Se der erro de permissão do Google, revise se a planilha foi compartilhada com o `client_email` da service account como Editor (passo 1, item 4).
 
 ### Erro no console: "Failed to load resource... 404" em style.css / config.js / sheets.js / draft.js
 
@@ -164,5 +179,5 @@ Isso significa que o navegador está pedindo os arquivos na raiz do site (`/styl
 
 ## Personalizando pontuações e regras
 
-- **Pontos de personagens/armas**: edite a coluna `Custo` na planilha.
-- **Regras do draft**: configuráveis na própria tela de Draft, sem precisar de código.
+- **Pontos de personagens/armas por nível**: painel **Admin** no site (mais fácil) ou direto nas colunas `CustoC0..CustoC6` / `CustoR1..CustoR5` da planilha (mesma informação).
+- **Regras do draft** (orçamento, nº de slots, limite de 5★, tempo por escolha): configuráveis na própria tela de Draft ao criar a partida, sem precisar de código.
