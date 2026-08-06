@@ -1,0 +1,72 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root{
+  --void-0:#08060d; --void-1:#120e1c; --void-2:#1c1629; --void-3:#2a2038;
+  --line: rgba(201,169,97,0.16);
+  --ink:#f1e9db; --ink-dim:#a99cc4; --ink-faint:#6f6485;
+  --gold:#c9a961; --gold-bright:#f0cf7e;
+  --danger:#e0577a; --ok:#7ed4a8;
+  --pyro:#f2743e; --hydro:#3fa3ec; --electro:#b774f0; --cryo:#6fe0ea;
+  --anemo:#4fd0a0; --geo:#f0c24a; --dendro:#9ed845;
+  --r5-a:#f0cf7e; --r5-b:#a4761f; --r4-a:#d6b3f0; --r4-b:#6a3f96; --r3-a:#b9c3d6;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{height:100%;}
+body{
+  background:
+    radial-gradient(ellipse 900px 600px at 15% -10%, rgba(107,63,150,0.35), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 110% 10%, rgba(63,90,150,0.25), transparent 60%),
+    var(--void-0);
+  color:var(--ink); font-family:'Manrope', sans-serif;
+  min-height:100vh; padding: 28px 20px 60px;
+}
+h1,h2,h3,.font-display{ font-family:'Cinzel', serif; letter-spacing:0.02em; }
+.wrap{ max-width:1180px; margin:0 auto; }
+
+.top{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:28px; flex-wrap:wrap; }
+.brand{ display:flex; align-items:center; gap:14px; }
+.brand-mark{ width:44px; height:44px; border-radius:50%;
+  background: conic-gradient(from 0deg, var(--gold), var(--electro), var(--hydro), var(--gold));
+  display:flex; align-items:center; justify-content:center; box-shadow: 0 0 24px rgba(201,169,97,0.35); }
+.brand-mark::after{ content:""; width:30px; height:30px; border-radius:50%; background: var(--void-0); }
+.brand h1{ font-size: 22px; color:var(--gold-bright); font-weight:700; }
+.brand p{ font-size:12.5px; color:var(--ink-faint); margin-top:2px; letter-spacing:0.06em; text-transform:uppercase;}
+
+.navlinks{ display:flex; gap:10px; }
+.navlinks a{ font-family:'Cinzel'; font-size:12.5px; letter-spacing:0.08em; text-transform:uppercase;
+  color:var(--ink-dim); text-decoration:none; padding:9px 16px; border:1px solid var(--line); border-radius:999px; }
+.navlinks a.active, .navlinks a:hover{ color:var(--gold-bright); border-color:var(--gold); }
+
+.phase-pill{ font-family:'Cinzel', serif; font-size:12px; letter-spacing:0.12em; text-transform:uppercase;
+  padding:8px 16px; border-radius:999px; border:1px solid var(--line); color:var(--gold-bright); background:rgba(201,169,97,0.07); }
+
+.panel{ background: linear-gradient(180deg, var(--void-2), var(--void-1)); border:1px solid var(--line); border-radius:16px; padding:22px; }
+.panel + .panel{ margin-top:18px; }
+
+.field label{ display:block; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:8px; }
+.field input, .field select{ width:100%; background:var(--void-0); border:1px solid var(--line); color:var(--ink);
+  padding:11px 12px; border-radius:10px; font-size:15px; font-family:'Manrope'; outline:none; }
+.field input:focus, .field select:focus{ border-color: var(--gold); }
+.field .hint{ font-size:11.5px; color:var(--ink-faint); margin-top:6px; }
+
+.btn{ font-family:'Cinzel',serif; letter-spacing:0.06em; text-transform:uppercase; font-size:13.5px; font-weight:600;
+  border:none; border-radius:11px; padding:14px 26px; cursor:pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.btn-primary{ background: linear-gradient(135deg, var(--gold-bright), var(--gold)); color:#241a08; box-shadow: 0 6px 22px rgba(201,169,97,0.25);}
+.btn-primary:hover{ transform: translateY(-1px); box-shadow: 0 8px 26px rgba(201,169,97,0.4); }
+.btn-ghost{ background:transparent; border:1px solid var(--line); color:var(--ink-dim); }
+.btn-ghost:hover{ color:var(--ink); border-color: var(--gold); }
+.btn-danger{ background:transparent; border:1px solid var(--danger); color:var(--danger); }
+.btn:disabled{ opacity:.4; cursor:not-allowed; transform:none; box-shadow:none; }
+
+.rules-box{ border:1px dashed var(--line); border-radius:12px; padding:16px 18px; margin-top:20px; font-size:13.5px; line-height:1.7; color:var(--ink-dim); }
+.rules-box b{ color:var(--gold-bright); font-weight:700; }
+
+.msg{ font-size:13px; margin-top:12px; min-height:18px; }
+.msg.error{ color:var(--danger); }
+.msg.ok{ color:var(--ok); }
+
+.hidden{ display:none !important; }
+.center-actions{ display:flex; gap:12px; justify-content:center; margin-top:26px; flex-wrap:wrap; }
+
+/* character/weapon card thumbnails, shared between profile and draft */
+.item-img{ width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:8px; background:var(--void-0); display:block; }
