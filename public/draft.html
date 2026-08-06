@@ -122,16 +122,17 @@
 
   <!-- ESCOLHA: criar partida ou entrar com código -->
   <section id="modeChoice" class="panel hidden">
-    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Preparar a Descida</h2>
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Preparar o Confronto</h2>
     <p class="hint" style="margin-top:8px;">Logado como <b id="meName"></b>.</p>
+    <p class="hint" id="notAdminNote" style="margin-top:4px; color:var(--gold-bright);"></p>
     <div class="mode-choice">
       <div class="mode-card" id="chooseCreate">
         <h3>Criar Partida</h3>
-        <p>Você define as regras e vira o Jogador 1. Vai gerar um código pra compartilhar com o outro jogador.</p>
+        <p>Você define as regras e vira o Jogador 1. Vai gerar um código pra compartilhar com o outro jogador. (Só o administrador vê esta opção.)</p>
       </div>
       <div class="mode-card" id="chooseJoin">
         <h3>Entrar com Código</h3>
-        <p>Alguém já criou a partida e te passou um código de 6 letras/números.</p>
+        <p>O administrador já criou a partida e te passou um código de 6 letras/números.</p>
       </div>
     </div>
   </section>
@@ -221,7 +222,7 @@
   </section>
 
   <section id="summary" class="hidden panel">
-    <h2 class="font-display" style="font-size:20px; color:var(--gold-bright); text-align:center; margin-bottom:24px;">Times Prontos para o Abismo</h2>
+    <h2 class="font-display" style="font-size:20px; color:var(--gold-bright); text-align:center; margin-bottom:24px;">Times Prontos para o Confronto</h2>
 
     <div id="finalScoreBanner" class="final-score-banner hidden">
       <div class="hint" style="text-transform:uppercase; letter-spacing:0.08em;">Pontuação Final (lançada pelo administrador)</div>
