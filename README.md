@@ -50,7 +50,7 @@ Sua planilha: `https://docs.google.com/spreadsheets/d/1uEyZn8X_QZY8u6CkMFoFr7unb
 
 Dois jogadores logados em aparelhos diferentes (computador, celular, o que for) jogam a **mesma partida** assim:
 
-1. Um dos dois clica em **Criar Partida**, define as regras (pontos, nº de personagens/armas, limite de 5★, tempo por escolha) e recebe um **código de 6 caracteres**.
+1. O **administrador** (quem tem `IsAdmin = TRUE` na aba `Usuarios`, veja 1.2) clica em **Criar Partida**, define as regras (pontos, nº de personagens/armas, limite de 5★, tempo por escolha) e recebe um **código de 6 caracteres**. Jogadores comuns não veem essa opção — só "Entrar com Código".
 2. Ele compartilha esse código com o outro jogador (WhatsApp, por exemplo).
 3. O outro jogador clica em **Entrar com Código**, digita o código, e a partida começa nos dois aparelhos ao mesmo tempo.
 4. Cada escolha feita por um jogador é gravada na aba `Partidas` da planilha; o navegador do outro jogador **consulta a planilha a cada ~2,5 segundos** (polling) e atualiza a tela sozinho — sem precisar recarregar a página.
@@ -70,7 +70,7 @@ Pra virar administrador:
 
 > Isso é verificado no servidor toda vez que a pontuação é salva (não é só esconder o botão na tela) — mesmo que alguém tente chamar a API na mão, só passa quem tiver `IsAdmin = TRUE` na planilha.
 
-**Limitação atual:** quem lança a pontuação precisa ser um dos dois jogadores daquela partida (ou seja, o admin também joga e, ao final, lança o placar). Um administrador de fora marcando o placar de partidas que ele não jogou é algo que dá pra evoluir depois, se vocês quiserem.
+**Limitação atual:** quem cria a partida (o admin) automaticamente vira o **Jogador 1** — ou seja, hoje o admin também precisa ser um dos dois duelistas. Um admin que só organiza partidas entre outras duas pessoas, sem jogar, é algo que dá pra evoluir depois se vocês quiserem (avise que eu ajusto).
 
 ## Abas da planilha (resumo)
 
@@ -149,9 +149,18 @@ Na Netlify:
 1. Abra o site → tela de **Perfil** → crie uma conta.
 2. Confira na planilha se apareceram as abas `Usuarios` (com um hash bcrypt na coluna `SenhaHash`, nunca a senha em texto puro) e `PersonagensUsuario`.
 3. Adicione personagens e defina a constelação de cada um.
-4. Vá em **Draft** → configure as regras → **Iniciar Draft**. Os personagens/armas devem aparecer com as imagens da planilha.
+4. Marque `TRUE` na coluna `IsAdmin` da sua linha em `Usuarios` (passo 1.2) pra virar admin.
+5. Vá em **Draft** → **Criar Partida** → configure as regras → compartilhe o código com o outro jogador (em outro aparelho) → ele clica em **Entrar com Código**.
 
 Se der erro de "Variáveis de ambiente não configuradas", revise o passo 2. Se der erro de permissão do Google, revise se a planilha foi compartilhada com o `client_email` da service account como Editor (passo 1.3).
+
+### Erro no console: "Failed to load resource... 404" em style.css / config.js / sheets.js / draft.js
+
+Isso significa que o navegador está pedindo os arquivos na raiz do site (`/style.css`, `/config.js`...) mas eles não estão lá — ou porque o **Publish directory** da Netlify não está configurado como `public`, ou porque o repositório no GitHub está com uma versão antiga/mesclada do projeto (de antes da pasta `public/` existir). Pra corrigir:
+
+1. Confirme que o repositório no GitHub tem exatamente a estrutura deste zip (com a pasta `public/` contendo `index.html`, `draft.html`, `css/`, `js/`) — se tiver `index.html` direto na raiz do repo (sem `public/`), apague tudo e suba este zip de novo por cima.
+2. Na Netlify: **Site settings → Build & deploy → Build settings → Publish directory** deve ser `public` (isso já vem certo no `netlify.toml`, mas confira se não foi sobrescrito manualmente no painel).
+3. Depois de corrigir, **Deploys → Trigger deploy → Clear cache and deploy site** (não só "Deploy site" — o cache antigo pode servir os arquivos velhos).
 
 ## Personalizando pontuações e regras
 
