@@ -21,6 +21,17 @@ module.exports = async function adminHandler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    if (body.action === 'updateDeckPointLimit') {
+      const { requesterId, value } = body;
+      await sheets.setDeckPointLimit(requesterId, value);
+      return res.status(200).json({ ok: true });
+    }
+
+    if (body.action === 'getDeckPointLimit') {
+      const limit = await sheets.getDeckPointLimit();
+      return res.status(200).json({ ok: true, limit });
+    }
+
     return res.status(400).json({ ok: false, msg: 'Ação desconhecida: ' + body.action });
   } catch (err) {
     return res.status(400).json({ ok: false, msg: err.message });
