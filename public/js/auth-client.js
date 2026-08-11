@@ -59,11 +59,11 @@ async function fetchMyCharacters(userId) {
   return (json.rows || []).sort((a, b) => a.character_name.localeCompare(b.character_name));
 }
 
-async function upsertMyCharacter(userId, characterName, constellation) {
+async function upsertMyCharacter(userId, characterName, constellation, extras) {
   const res = await fetch('/api/personagens', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, characterName, constellation }),
+    body: JSON.stringify(Object.assign({ userId, characterName, constellation }, extras || {})),
   });
   const json = await res.json();
   if (!json.ok) throw new Error(json.msg || 'Erro ao salvar personagem.');
