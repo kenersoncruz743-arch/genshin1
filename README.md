@@ -22,12 +22,16 @@ confronto-abissal/
 │       ├── draft.js            # lógica do draft
 │       └── admin.js            # lógica do painel do admin
 ├── lib/
-│   └── sheets.js               # ★ só roda no servidor — fala com a planilha usando a service account
+│   ├── sheets.js               # ★ só roda no servidor — fala com a planilha usando a service account
+│   ├── enka.js                 # ★ busca perfil público na Enka.Network a partir do UID
+│   ├── enka-characters.json    # tabela de nomes de personagens (fallback offline)
+│   └── enka-weapons.json       # tabela de nomes de armas (fallback offline)
 ├── api/
 │   ├── auth.js                 # handler de signup/login
 │   ├── personagens.js          # handler de catálogo + personagens do usuário
 │   ├── partida.js              # handler de criar/entrar/jogar/finalizar partida (draft sincronizado)
-│   └── admin.js                # handler de alterar pontuação por nível (admin-only)
+│   ├── admin.js                # handler de alterar pontuação por nível + limite do deck (admin-only)
+│   └── enka.js                 # handler de importar personagens pelo UID
 ├── netlify/functions/api.js    # roteador das Netlify Functions
 ├── netlify.toml
 ├── package.json
@@ -86,15 +90,35 @@ Cada campo salva sozinho assim que você sai dele (não precisa de botão "salva
 
 **No draft**, ao clicar num personagem ou arma, o jogador escolhe o nível (C0–C6 ou R1–R5) num pop-up que mostra o custo de cada um; níveis que estourariam o orçamento restante ou o limite de armas 5★ aparecem desabilitados. O contador de "pontos restantes" de cada jogador (visível o tempo todo na tela do draft) reflete isso em tempo real.
 
+## 1.4 UID do Genshin — importar personagens automaticamente (igual o Akasha)
+
+No **Perfil**, cada jogador pode colar o próprio **UID do Genshin Impact** e clicar em **"Buscar Perfil"**. Isso busca o perfil público na [Enka.Network](https://enka.network) — a mesma fonte de dados que sites como o Akasha usam — sem precisar de login nem senha da conta HoYoverse, só o UID (que é público).
+
+O que isso traz:
+- **Nível e apelido** do jogador.
+- **Andar/câmara do Abismo** (Espiral) mais recente que ele alcançou — ex: "12-3".
+- Os **personagens da vitrine in-game** (até 8, os que o jogador escolheu mostrar), com **constelação** e **arma equipada** — esses personagens são adicionados automaticamente na lista "Meus Personagens" do jogador, respeitando o limite de pontos do deck (ver 1.5).
+
+> **Importante:** pra vir a constelação e a arma certas, o jogador precisa ter **"Mostrar Detalhes do Personagem"** ativado na vitrine, dentro do próprio Genshin (Perfil → Vitrine de Personagens → engrenagem). Sem isso, a Enka só enxerga o nível — o personagem ainda é importado, mas a constelação entra como C0 por padrão.
+>
+> Personagens muito recentes podem não ser reconhecidos ainda (a tabela de nomes vem de um projeto de fãs, atualizada mas não instantânea) — nesse caso eles aparecem na lista de "ignorados" com o motivo.
+
+## 1.5 Limite de pontos do deck do jogador
+
+No painel **Admin**, em **"Limite de Pontos do Deck do Jogador"**, você define um teto de pontos pra lista "Meus Personagens" de cada jogador (some o custo de cada personagem na constelação escolhida, usando a mesma tabela `CustoC0..CustoC6`). Deixe o campo em branco pra não ter limite.
+
+Isso vale tanto pra quem adiciona manualmente quanto pra importação por UID — se importar mais personagens do que cabe no limite, os que não couberem ficam de fora (aparecem como "ignorados" com o motivo "ultrapassaria o limite"). O jogador vê um contador "X / Y pontos" na tela de Perfil o tempo todo.
+
 ## Abas da planilha (resumo)
 
 | Aba | Colunas | Criada por |
 |---|---|---|
 | `Personagens` | `Nome, Elemento, Raridade, ImagemURL, CustoC0..CustoC6` | você (custos ajustáveis no painel Admin) |
 | `Armas` | `Nome, Raridade, ImagemURL, CustoR1..CustoR5` | você (custos ajustáveis no painel Admin) |
-| `Usuarios` | `Id, Email, SenhaHash, Username, IsAdmin, CriadoEm` | servidor (automático) |
+| `Usuarios` | `Id, Email, SenhaHash, Username, IsAdmin, CriadoEm, UID, ApelidoJogo, NivelJogo, AbismoAndar, AbismoCamara, UIDAtualizadoEm` | servidor (automático) |
 | `PersonagensUsuario` | `UserId, Personagem, Constelacao, AtualizadoEm` | servidor (automático) |
 | `Partidas` | `PartidaId, CriadorId, CriadorNome, Jogador1Id, Jogador1Nome, Jogador2Id, Jogador2Nome, ConfigJSON, EstadoJSON, Status, Versao, PontosFinaisJ1, PontosFinaisJ2, Vencedor, CriadaEm, AtualizadaEm` | servidor (automático) |
+| `Config` | `Chave, Valor` (guarda o limite de pontos do deck e futuras configurações) | servidor (automático) |
 
 ---
 
@@ -164,8 +188,9 @@ Na Netlify:
 2. Confira na planilha se apareceram as abas `Usuarios` (com um hash bcrypt na coluna `SenhaHash`, nunca a senha em texto puro) e `PersonagensUsuario`.
 3. Adicione personagens e defina a constelação de cada um.
 4. Marque `TRUE` na coluna `IsAdmin` da sua linha em `Usuarios` (passo 1.2) pra virar admin.
-5. Vá em **Admin** → ajuste alguns custos por constelação/refinamento (passo 1.3) pra ver se salva na planilha.
-6. Vá em **Draft** → **Criar Partida** → configure as regras → compartilhe o código com os dois jogadores (em dois outros aparelhos/contas) → cada um clica em **Entrar com Código**. Você (admin) fica acompanhando como espectador.
+5. Vá em **Admin** → ajuste alguns custos por constelação/refinamento (passo 1.3) e opcionalmente um limite de pontos do deck (passo 1.5) → confira se salva na planilha.
+6. De volta ao **Perfil**, cole um UID válido de Genshin (o seu ou de algum amigo que topar) → **Buscar Perfil** → confira se veio o Abismo e os personagens da vitrine.
+7. Vá em **Draft** → **Criar Partida** → configure as regras → compartilhe o código com os dois jogadores (em dois outros aparelhos/contas) → cada um clica em **Entrar com Código**. Você (admin) fica acompanhando como espectador.
 
 Se der erro de "Variáveis de ambiente não configuradas", revise o passo 2. Se der erro de permissão do Google, revise se a planilha foi compartilhada com o `client_email` da service account como Editor (passo 1, item 4).
 
