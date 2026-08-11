@@ -84,23 +84,34 @@ async function renderMyCharacterList(userId){
   list.innerHTML = '';
   mine.forEach(row => {
     const catalogItem = CHAR_CATALOG.find(c => c.name === row.character_name);
+    const enkaIcon = row.build_detalhes && row.build_detalhes.icon;
+    const imgSrc = enkaIcon || (catalogItem && catalogItem.image) || '';
     const card = document.createElement('div');
-    card.className = 'char-card';
+    card.className = 'char-card' + (row.build_detalhes ? ' has-build' : '');
     card.innerHTML = `
       <button class="btn-remove" data-name="${row.character_name}" title="Remover">✕</button>
-      ${catalogItem && catalogItem.image ? `<img class="char-card-img" src="${catalogItem.image}" onerror="this.style.display='none'">` : '<div class="char-card-img"></div>'}
+      ${imgSrc ? `<img class="char-card-img" src="${imgSrc}" onerror="this.style.display='none'">` : '<div class="char-card-img"></div>'}
       <div class="char-card-body">
         <div class="char-card-name">${row.character_name}</div>
         <div class="char-card-meta">${catalogItem ? `${catalogItem.rarity}★ ${catalogItem.element || ''}` : ''}</div>
-        <select class="constel-select" data-name="${row.character_name}">
-          ${[0,1,2,3,4,5,6].map(n => `<option value="${n}" ${n===row.constellation?'selected':''}>C${n}</option>`).join('')}
-        </select>
+        <select class="constel-select" data-name="${row.character_name}"></select>
         ${row.weapon_name ? `<div class="char-card-build">🗡️ ${row.weapon_name}${row.weapon_refinement ? ' (R'+row.weapon_refinement+')' : ''}</div>` : ''}
         ${row.build ? `<div class="char-card-build">🛡️ ${row.build}</div>` : ''}
         ${(!row.weapon_name && !row.build) ? `<div class="char-card-build hint">Sem build importada — conecte seu UID ou adicione na mão.</div>` : ''}
+        ${row.build_detalhes ? `<button class="btn btn-ghost btn-view-build" data-name="${row.character_name}">Ver build completa</button>` : ''}
       </div>
     `;
+    const sel = card.querySelector('.constel-select');
+    sel.innerHTML = [0,1,2,3,4,5,6].map(n => `<option value="${n}" ${n===row.constellation?'selected':''}>C${n}</option>`).join('');
     list.appendChild(card);
+  });
+
+  list.querySelectorAll('.btn-view-build').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const row = MY_CHARS_CACHE.find(r => r.character_name === btn.dataset.name);
+      if(row) openBuildModal(row);
+    });
   });
 
   list.querySelectorAll('.constel-select').forEach(sel => {
@@ -191,6 +202,68 @@ function closeAddCharModal(){
   document.getElementById('addCharModal').classList.add('hidden');
 }
 
+/* ---------------- Modal: build completa (arma + 5 artefatos + stats) ---------------- */
+
+const RARITY_COLOR = { 5: '#e8b04b', 4: '#b48ee0', 3: '#6fa8dc' };
+
+function openBuildModal(row){
+  const b = row.build_detalhes;
+  if(!b) return;
+  const catalogItem = CHAR_CATALOG.find(c => c.name === row.character_name);
+
+  document.getElementById('buildModalTitle').textContent = `${row.character_name} · C${row.constellation}${b.level ? ' · Lv. '+b.level : ''}`;
+
+  const weaponHtml = b.weapon ? `
+    <div class="build-weapon">
+      ${b.weapon.icon ? `<img class="build-weapon-img" src="${b.weapon.icon}" onerror="this.style.display='none'">` : ''}
+      <div>
+        <div class="build-weapon-name">${b.weapon.name} <span class="hint">R${b.weapon.refinement || 1} · Lv.${b.weapon.level || '?'}</span></div>
+        <div class="build-weapon-stats">${(b.weapon.stats||[]).map(s => `<span>${s.label}: <b>${s.value}</b></span>`).join(' &nbsp;·&nbsp; ')}</div>
+      </div>
+    </div>` : '<div class="hint">Sem arma detectada.</div>';
+
+  const artifactsHtml = (b.artifacts && b.artifacts.length) ? `
+    <div class="build-artifacts">
+      ${b.artifacts.map(a => `
+        <div class="artifact-card" style="--rarity-color:${RARITY_COLOR[a.rarity] || RARITY_COLOR[5]}">
+          <div class="artifact-top">
+            ${a.icon ? `<img class="artifact-img" src="${a.icon}" onerror="this.style.display='none'">` : ''}
+            <div>
+              <div class="artifact-slot">${a.slot || ''} · +${a.level || 0}</div>
+              ${a.setName ? `<div class="artifact-set">${a.setName}</div>` : ''}
+            </div>
+          </div>
+          ${a.mainStat ? `<div class="artifact-main">${a.mainStat.label}<b>${a.mainStat.value}</b></div>` : ''}
+          <div class="artifact-subs">
+            ${(a.subStats||[]).map(s => `<div>+ ${s.label} <b>${s.value}</b></div>`).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>` : '<div class="hint">Sem artefatos detalhados — reimporte com "Mostrar detalhes" ativado no jogo.</div>';
+
+  const statsHtml = (b.stats && b.stats.length) ? `
+    <div class="build-stats-grid">
+      ${b.stats.map(s => `<div class="build-stat"><span>${s.label}</span><b>${s.value}</b></div>`).join('')}
+    </div>` : '';
+
+  document.getElementById('buildModalBody').innerHTML = `
+    <div class="build-header">
+      ${(b.icon || (catalogItem && catalogItem.image)) ? `<img class="build-portrait" src="${b.icon || catalogItem.image}" onerror="this.style.display='none'">` : ''}
+      <div style="flex:1;">
+        ${weaponHtml}
+        ${statsHtml}
+      </div>
+    </div>
+    ${artifactsHtml}
+  `;
+
+  document.getElementById('buildModal').classList.remove('hidden');
+}
+
+function closeBuildModal(){
+  document.getElementById('buildModal').classList.add('hidden');
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const session = await getSession();
   if(session) await renderProfile(session);
@@ -237,6 +310,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('addCharSearch').addEventListener('input', (e) => {
     renderAddCharModal(e.target.value);
+  });
+
+  document.getElementById('closeBuildModalBtn').addEventListener('click', closeBuildModal);
+  document.getElementById('buildModal').addEventListener('click', (e) => {
+    if(e.target.id === 'buildModal') closeBuildModal();
   });
 
   document.getElementById('uidBtn').addEventListener('click', async () => {
