@@ -1,4 +1,5 @@
 let CHAR_CATALOG = [];
+let DECK_LIMIT = null;
 
 function showMsg(el, text, kind){
   el.textContent = text;
@@ -22,7 +23,43 @@ async function renderProfile(session){
     showMsg(document.getElementById('profileMsg'), 'Não foi possível carregar a lista de personagens da planilha: ' + e.message, 'error');
   }
 
+  DECK_LIMIT = await getDeckPointLimit();
+
+  const perfilJogo = await getMyGameProfile(session.id);
+  if(perfilJogo) renderUidSummary(perfilJogo);
+
   await renderMyCharacterList(session.id);
+}
+
+function renderUidSummary(perfil){
+  document.getElementById('uidInput').value = perfil.uid;
+  document.getElementById('uidSummary').classList.remove('hidden');
+  document.getElementById('uidNickname').textContent = perfil.nickname || perfil.uid;
+  document.getElementById('uidNivel').textContent = perfil.nivelJogo || '—';
+  document.getElementById('uidAbismo').textContent = (perfil.abyssFloor && perfil.abyssChamber)
+    ? `${perfil.abyssFloor}-${perfil.abyssChamber}`
+    : 'não disponível';
+  const dt = perfil.atualizadoEm ? new Date(perfil.atualizadoEm) : null;
+  document.getElementById('uidLastSync').textContent = dt ? `Atualizado em ${dt.toLocaleString('pt-BR')}` : '';
+}
+
+function deckPointsFor(mine){
+  return mine.reduce((sum, row) => {
+    const item = CHAR_CATALOG.find(c => c.name === row.character_name);
+    const cost = item ? (item.costs['C'+row.constellation] ?? 0) : 0;
+    return sum + cost;
+  }, 0);
+}
+
+function renderDeckCounter(mine){
+  const used = deckPointsFor(mine);
+  const el = document.getElementById('deckPointsCounter');
+  if(DECK_LIMIT === null){
+    el.textContent = `${used} pontos usados (sem limite definido)`;
+  } else {
+    el.textContent = `${used} / ${DECK_LIMIT} pontos`;
+    el.style.color = used > DECK_LIMIT ? 'var(--danger)' : (used === DECK_LIMIT ? 'var(--gold-bright)' : 'var(--ink-faint)');
+  }
 }
 
 async function renderMyCharacterList(userId){
@@ -36,6 +73,9 @@ async function renderMyCharacterList(userId){
     showMsg(document.getElementById('profileMsg'), 'Não foi possível carregar seus personagens: ' + e.message, 'error');
     return;
   }
+
+  renderDeckCounter(mine);
+
   if(mine.length === 0){
     list.innerHTML = '<div class="hint">Você ainda não adicionou nenhum personagem.</div>';
     return;
@@ -57,10 +97,17 @@ async function renderMyCharacterList(userId){
   });
 
   list.querySelectorAll('.constel-select').forEach(sel => {
+    const previousValue = sel.value;
     sel.addEventListener('change', async () => {
       const session = await getSession();
-      await upsertMyCharacter(session.id, sel.dataset.name, parseInt(sel.value,10));
-      showMsg(document.getElementById('profileMsg'), 'Constelação atualizada.', 'ok');
+      try{
+        await upsertMyCharacter(session.id, sel.dataset.name, parseInt(sel.value,10));
+        showMsg(document.getElementById('profileMsg'), 'Constelação atualizada.', 'ok');
+        await renderMyCharacterList(session.id);
+      } catch(e){
+        sel.value = previousValue;
+        showMsg(document.getElementById('profileMsg'), e.message, 'error');
+      }
     });
   });
   list.querySelectorAll('.btn-remove').forEach(btn => {
@@ -115,9 +162,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     const select = document.getElementById('addCharSelect');
     if(!select.value) return;
     const session = await getSession();
-    await upsertMyCharacter(session.id, select.value, 0);
-    select.value = '';
-    await renderMyCharacterList(session.id);
+    try{
+      await upsertMyCharacter(session.id, select.value, 0);
+      select.value = '';
+      await renderMyCharacterList(session.id);
+    } catch(e){
+      showMsg(document.getElementById('profileMsg'), e.message, 'error');
+    }
+  });
+
+  document.getElementById('uidBtn').addEventListener('click', async () => {
+    const uid = document.getElementById('uidInput').value.trim();
+    const msgEl = document.getElementById('uidMsg');
+    if(!uid){ showMsg(msgEl, 'Digite seu UID.', 'error'); return; }
+    const session = await getSession();
+    showMsg(msgEl, 'Buscando perfil na Enka.Network…', '');
+    try{
+      const resultado = await importUidProfile(session.id, uid);
+      renderUidSummary(resultado.perfil);
+      let texto = `Importados ${resultado.importados.length} personagem(ns).`;
+      if(resultado.ignorados.length){
+        texto += ` ${resultado.ignorados.length} não entraram: ${resultado.ignorados.map(i=>i.name).join(', ')}.`;
+      }
+      showMsg(msgEl, texto, resultado.ignorados.length ? 'error' : 'ok');
+      await renderMyCharacterList(session.id);
+    } catch(e){
+      showMsg(msgEl, e.message, 'error');
+    }
   });
 
   document.getElementById('logoutBtn').addEventListener('click', async () => {
