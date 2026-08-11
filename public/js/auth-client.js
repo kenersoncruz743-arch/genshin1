@@ -78,3 +78,38 @@ async function deleteMyCharacter(userId, characterName) {
   const json = await res.json();
   if (!json.ok) throw new Error(json.msg || 'Erro ao remover personagem.');
 }
+
+/* ---------------- UID do Genshin (Enka.Network) ---------------- */
+
+async function importUidProfile(userId, uid) {
+  const res = await fetch('/api/enka', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'importarUID', userId, uid }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.msg || 'Erro ao buscar UID.');
+  return json;
+}
+
+async function getMyGameProfile(userId) {
+  const res = await fetch('/api/enka', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'meuPerfilJogo', userId }),
+  });
+  const json = await res.json();
+  if (!json.ok) return null;
+  return json.perfil;
+}
+
+async function getDeckPointLimit() {
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'getDeckPointLimit' }),
+  });
+  const json = await res.json();
+  if (!json.ok) return null;
+  return json.limit;
+}
