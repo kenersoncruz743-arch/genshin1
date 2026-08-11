@@ -1,6 +1,21 @@
 let CHAR_CATALOG = [];
 let DECK_LIMIT = null;
 
+// Se um elemento não existir na página (ex: HTML desatualizado, ou uma
+// versão antiga do arquivo ainda em cache), addEventListener direto
+// quebraria com "Cannot read properties of null" e travaria TODO o resto
+// do script que vem depois — inclusive coisas sem relação nenhuma, como o
+// botão de buscar perfil. Esse helper evita isso: se o elemento não
+// existir, só avisa no console e segue o app funcionando.
+function on(id, event, handler){
+  const el = document.getElementById(id);
+  if(!el){
+    console.warn(`[auth.js] elemento #${id} não encontrado na página — o HTML pode estar desatualizado.`);
+    return;
+  }
+  el.addEventListener(event, handler);
+}
+
 function showMsg(el, text, kind){
   el.textContent = text;
   el.className = 'msg ' + (kind || '');
@@ -104,6 +119,16 @@ async function renderMyCharacterList(userId){
     const sel = card.querySelector('.constel-select');
     sel.innerHTML = [0,1,2,3,4,5,6].map(n => `<option value="${n}" ${n===row.constellation?'selected':''}>C${n}</option>`).join('');
     list.appendChild(card);
+  });
+
+  list.querySelectorAll('.char-card.has-build').forEach(card => {
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', (e) => {
+      if(e.target.closest('.btn-remove') || e.target.closest('.constel-select')) return;
+      const name = card.querySelector('.btn-remove').dataset.name;
+      const row = MY_CHARS_CACHE.find(r => r.character_name === name);
+      if(row) openBuildModal(row);
+    });
   });
 
   list.querySelectorAll('.btn-view-build').forEach(btn => {
@@ -272,7 +297,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(link) link.classList.remove('hidden');
   }
 
-  document.getElementById('toggleModeBtn').addEventListener('click', () => {
+  on('toggleModeBtn', 'click', () => {
     const isSignup = document.getElementById('authForm').dataset.mode === 'signup';
     document.getElementById('authForm').dataset.mode = isSignup ? 'login' : 'signup';
     document.getElementById('usernameField').classList.toggle('hidden', isSignup);
@@ -280,7 +305,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('toggleModeBtn').textContent = isSignup ? 'Não tem conta? Criar uma' : 'Já tem conta? Entrar';
   });
 
-  document.getElementById('authForm').addEventListener('submit', async (e) => {
+  on('authForm', 'submit', async (e) => {
     e.preventDefault();
     const mode = document.getElementById('authForm').dataset.mode || 'signup';
     const email = document.getElementById('authEmail').value.trim();
@@ -303,21 +328,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  document.getElementById('openAddCharModalBtn').addEventListener('click', openAddCharModal);
-  document.getElementById('closeAddCharModalBtn').addEventListener('click', closeAddCharModal);
-  document.getElementById('addCharModal').addEventListener('click', (e) => {
+  on('openAddCharModalBtn', 'click', openAddCharModal);
+  on('closeAddCharModalBtn', 'click', closeAddCharModal);
+  on('addCharModal', 'click', (e) => {
     if(e.target.id === 'addCharModal') closeAddCharModal();
   });
-  document.getElementById('addCharSearch').addEventListener('input', (e) => {
+  on('addCharSearch', 'input', (e) => {
     renderAddCharModal(e.target.value);
   });
 
-  document.getElementById('closeBuildModalBtn').addEventListener('click', closeBuildModal);
-  document.getElementById('buildModal').addEventListener('click', (e) => {
+  on('closeBuildModalBtn', 'click', closeBuildModal);
+  on('buildModal', 'click', (e) => {
     if(e.target.id === 'buildModal') closeBuildModal();
   });
 
-  document.getElementById('uidBtn').addEventListener('click', async () => {
+  on('uidBtn', 'click', async () => {
     const uid = document.getElementById('uidInput').value.trim();
     const msgEl = document.getElementById('uidMsg');
     const detailsEl = document.getElementById('uidImportDetails');
@@ -344,7 +369,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  document.getElementById('logoutBtn').addEventListener('click', async () => {
+  on('logoutBtn', 'click', async () => {
     await handleSignOut();
     location.reload();
   });
