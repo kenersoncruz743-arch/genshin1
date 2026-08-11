@@ -123,6 +123,37 @@ document.getElementById('adminSearchInput').addEventListener('input', (e)=>{
   renderWeaponsTable(e.target.value);
 });
 
+async function loadDeckLimit(){
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ action:'getDeckPointLimit' })
+  });
+  const json = await res.json();
+  if(json.ok && json.limit !== null){
+    document.getElementById('deckLimitInput').value = json.limit;
+  }
+}
+
+document.getElementById('deckLimitBtn').addEventListener('click', async ()=>{
+  const msgEl = document.getElementById('deckLimitMsg');
+  const raw = document.getElementById('deckLimitInput').value;
+  try{
+    const res = await fetch('/api/admin', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'updateDeckPointLimit', requesterId: ME.id, value: raw === '' ? '' : Number(raw) })
+    });
+    const json = await res.json();
+    if(!json.ok) throw new Error(json.msg);
+    msgEl.textContent = 'Salvo!';
+    msgEl.className = 'msg ok';
+  } catch(e){
+    msgEl.textContent = e.message;
+    msgEl.className = 'msg error';
+  }
+});
+
 async function boot(){
   ME = await getSession();
   if(!ME || !ME.isAdmin){
@@ -137,7 +168,9 @@ async function boot(){
     WEAPON_CATALOG = catalogo.weapons;
     renderCharsTable('');
     renderWeaponsTable('');
+    await loadDeckLimit();
     document.getElementById('loadingBox').classList.add('hidden');
+    document.getElementById('deckLimitPanel').classList.remove('hidden');
     document.getElementById('adminPanel').classList.remove('hidden');
   } catch(e){
     document.getElementById('loadingBox').innerHTML = `<p style="color:var(--danger);">Erro ao carregar: ${e.message}</p>`;
