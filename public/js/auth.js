@@ -174,17 +174,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('uidBtn').addEventListener('click', async () => {
     const uid = document.getElementById('uidInput').value.trim();
     const msgEl = document.getElementById('uidMsg');
+    const detailsEl = document.getElementById('uidImportDetails');
+    detailsEl.classList.add('hidden');
+    detailsEl.innerHTML = '';
     if(!uid){ showMsg(msgEl, 'Digite seu UID.', 'error'); return; }
     const session = await getSession();
     showMsg(msgEl, 'Buscando perfil na Enka.Network…', '');
     try{
       const resultado = await importUidProfile(session.id, uid);
       renderUidSummary(resultado.perfil);
-      let texto = `Importados ${resultado.importados.length} personagem(ns).`;
+
+      showMsg(msgEl, `Importados ${resultado.importados.length} de ${resultado.importados.length + resultado.ignorados.length} personagem(ns) da vitrine.`, resultado.ignorados.length ? 'error' : 'ok');
+
       if(resultado.ignorados.length){
-        texto += ` ${resultado.ignorados.length} não entraram: ${resultado.ignorados.map(i=>i.name).join(', ')}.`;
+        detailsEl.classList.remove('hidden');
+        detailsEl.innerHTML = '<b style="color:var(--danger);">Não entraram:</b><ul style="margin:6px 0 0 18px; color:var(--ink-dim);">' +
+          resultado.ignorados.map(i => `<li>${i.name} — ${i.motivo}</li>`).join('') +
+          '</ul>';
       }
-      showMsg(msgEl, texto, resultado.ignorados.length ? 'error' : 'ok');
       await renderMyCharacterList(session.id);
     } catch(e){
       showMsg(msgEl, e.message, 'error');
