@@ -2,6 +2,9 @@
   publish = "public"
   command = "npm install"
 
+[build.environment]
+  NODE_VERSION = "18"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
