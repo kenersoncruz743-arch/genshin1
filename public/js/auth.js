@@ -16,9 +16,6 @@ async function renderProfile(session){
 
   try{
     if(CHAR_CATALOG.length === 0) CHAR_CATALOG = await loadCharacters();
-    const select = document.getElementById('addCharSelect');
-    select.innerHTML = '<option value="">Selecione um personagem…</option>' +
-      CHAR_CATALOG.map(c => `<option value="${c.name}">${c.rarity}★ ${c.name}</option>`).join('');
   } catch(e){
     showMsg(document.getElementById('profileMsg'), 'Não foi possível carregar a lista de personagens da planilha: ' + e.message, 'error');
   }
@@ -62,6 +59,8 @@ function renderDeckCounter(mine){
   }
 }
 
+let MY_CHARS_CACHE = [];
+
 async function renderMyCharacterList(userId){
   const list = document.getElementById('myCharList');
   list.innerHTML = '<div class="hint">Carregando…</div>';
@@ -74,26 +73,34 @@ async function renderMyCharacterList(userId){
     return;
   }
 
+  MY_CHARS_CACHE = mine;
   renderDeckCounter(mine);
 
   if(mine.length === 0){
-    list.innerHTML = '<div class="hint">Você ainda não adicionou nenhum personagem.</div>';
+    list.innerHTML = '<div class="hint">Você ainda não adicionou nenhum personagem. Clique em "Adicionar personagem" abaixo.</div>';
     return;
   }
+  list.className = 'char-grid';
   list.innerHTML = '';
   mine.forEach(row => {
     const catalogItem = CHAR_CATALOG.find(c => c.name === row.character_name);
-    const div = document.createElement('div');
-    div.className = 'char-row';
-    div.innerHTML = `
-      ${catalogItem && catalogItem.image ? `<img class="item-img" style="width:44px;height:44px;" src="${catalogItem.image}" onerror="this.style.display='none'">` : ''}
-      <span class="char-name">${row.character_name}</span>
-      <select class="constel-select" data-name="${row.character_name}">
-        ${[0,1,2,3,4,5,6].map(n => `<option value="${n}" ${n===row.constellation?'selected':''}>C${n}</option>`).join('')}
-      </select>
+    const card = document.createElement('div');
+    card.className = 'char-card';
+    card.innerHTML = `
       <button class="btn-remove" data-name="${row.character_name}" title="Remover">✕</button>
+      ${catalogItem && catalogItem.image ? `<img class="char-card-img" src="${catalogItem.image}" onerror="this.style.display='none'">` : '<div class="char-card-img"></div>'}
+      <div class="char-card-body">
+        <div class="char-card-name">${row.character_name}</div>
+        <div class="char-card-meta">${catalogItem ? `${catalogItem.rarity}★ ${catalogItem.element || ''}` : ''}</div>
+        <select class="constel-select" data-name="${row.character_name}">
+          ${[0,1,2,3,4,5,6].map(n => `<option value="${n}" ${n===row.constellation?'selected':''}>C${n}</option>`).join('')}
+        </select>
+        ${row.weapon_name ? `<div class="char-card-build">🗡️ ${row.weapon_name}${row.weapon_refinement ? ' (R'+row.weapon_refinement+')' : ''}</div>` : ''}
+        ${row.build ? `<div class="char-card-build">🛡️ ${row.build}</div>` : ''}
+        ${(!row.weapon_name && !row.build) ? `<div class="char-card-build hint">Sem build importada — conecte seu UID ou adicione na mão.</div>` : ''}
+      </div>
     `;
-    list.appendChild(div);
+    list.appendChild(card);
   });
 
   list.querySelectorAll('.constel-select').forEach(sel => {
@@ -117,6 +124,71 @@ async function renderMyCharacterList(userId){
       await renderMyCharacterList(session.id);
     });
   });
+}
+
+/* ---------------- Modal: adicionar personagem (grade de cards com busca) ---------------- */
+
+function renderAddCharModal(filterText){
+  const grid = document.getElementById('addCharGrid');
+  const mineNames = new Set(MY_CHARS_CACHE.map(r => r.character_name));
+  const term = (filterText || '').trim().toLowerCase();
+
+  const items = CHAR_CATALOG
+    .filter(c => !term || c.name.toLowerCase().includes(term))
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  if(items.length === 0){
+    grid.innerHTML = '<div class="hint">Nenhum personagem encontrado.</div>';
+    return;
+  }
+
+  grid.innerHTML = items.map(c => {
+    const owned = mineNames.has(c.name);
+    return `
+      <div class="char-card pick-card">
+        ${c.image ? `<img class="char-card-img" src="${c.image}" onerror="this.style.display='none'">` : '<div class="char-card-img"></div>'}
+        <div class="char-card-body">
+          <div class="char-card-name">${c.name}</div>
+          <div class="char-card-meta">${c.rarity}★ ${c.element || ''}</div>
+          <button class="btn ${owned ? 'btn-ghost' : 'btn-primary'} btn-pick" data-name="${c.name}" data-owned="${owned}">
+            ${owned ? 'Remover' : '+ Adicionar'}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('.btn-pick').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const session = await getSession();
+      const name = btn.dataset.name;
+      const owned = btn.dataset.owned === 'true';
+      btn.disabled = true;
+      try{
+        if(owned){
+          await deleteMyCharacter(session.id, name);
+        } else {
+          await upsertMyCharacter(session.id, name, 0);
+        }
+        await renderMyCharacterList(session.id);
+        renderAddCharModal(document.getElementById('addCharSearch').value);
+      } catch(e){
+        showMsg(document.getElementById('profileMsg'), e.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+function openAddCharModal(){
+  document.getElementById('addCharModal').classList.remove('hidden');
+  document.getElementById('addCharSearch').value = '';
+  renderAddCharModal('');
+}
+
+function closeAddCharModal(){
+  document.getElementById('addCharModal').classList.add('hidden');
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -158,17 +230,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  document.getElementById('addCharBtn').addEventListener('click', async () => {
-    const select = document.getElementById('addCharSelect');
-    if(!select.value) return;
-    const session = await getSession();
-    try{
-      await upsertMyCharacter(session.id, select.value, 0);
-      select.value = '';
-      await renderMyCharacterList(session.id);
-    } catch(e){
-      showMsg(document.getElementById('profileMsg'), e.message, 'error');
-    }
+  document.getElementById('openAddCharModalBtn').addEventListener('click', openAddCharModal);
+  document.getElementById('closeAddCharModalBtn').addEventListener('click', closeAddCharModal);
+  document.getElementById('addCharModal').addEventListener('click', (e) => {
+    if(e.target.id === 'addCharModal') closeAddCharModal();
+  });
+  document.getElementById('addCharSearch').addEventListener('input', (e) => {
+    renderAddCharModal(e.target.value);
   });
 
   document.getElementById('uidBtn').addEventListener('click', async () => {
