@@ -27,6 +27,10 @@
   .table-wrap{ max-height:70vh; overflow:auto; border:1px solid var(--line); border-radius:12px; }
   #adminSearch{ max-width:320px; }
   .save-flash{ font-size:11px; color:var(--ok); margin-left:4px; }
+  .add-row{ display:flex; gap:10px; margin-top:6px; }
+  .add-row input{ flex:1; background:var(--void-0); border:1px solid var(--line); color:var(--ink);
+    border-radius:8px; padding:10px 12px; font-size:13px; font-family:inherit; }
+  .add-row input:focus{ border-color:var(--gold); outline:none; }
 </style>
 </head>
 <body>
@@ -52,6 +56,16 @@
     <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Acesso restrito</h2>
     <p class="hint" style="margin:10px 0 16px;">Essa página é só para o administrador. Se você acha que deveria ter acesso, confirme que a coluna <code>IsAdmin</code> está <code>TRUE</code> na sua linha da aba <code>Usuarios</code>.</p>
     <div class="center-actions"><a href="index.html" class="btn btn-primary">Voltar ao Perfil</a></div>
+  </section>
+
+  <section id="deckLimitPanel" class="panel hidden">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright);">Limite de Pontos do Deck do Jogador</h2>
+    <p class="hint" style="margin:8px 0 14px;">O deck de cada jogador (a lista "Meus Personagens" no Perfil, incluindo o que é importado pelo UID) não pode ultrapassar esse total de pontos. Deixe em branco pra não ter limite.</p>
+    <div class="add-row" style="max-width:320px;">
+      <input type="number" id="deckLimitInput" placeholder="Sem limite" min="0">
+      <button class="btn btn-primary" id="deckLimitBtn">Salvar</button>
+    </div>
+    <div class="msg" id="deckLimitMsg"></div>
   </section>
 
   <section id="adminPanel" class="panel hidden">
