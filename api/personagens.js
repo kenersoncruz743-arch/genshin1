@@ -20,12 +20,12 @@ module.exports = async function personagensHandler(req, res) {
 
     // POST /api/personagens { userId, characterName, constellation, weaponName?, weaponRefinement?, build? } -> salvar/atualizar
     if (req.method === 'POST') {
-      const { userId, characterName, constellation, weaponName, weaponRefinement, build } = req.body || {};
+      const { userId, characterName, constellation, weaponName, weaponRefinement, build, buildDetalhes } = req.body || {};
       if (!userId || !characterName) {
         return res.status(400).json({ ok: false, msg: 'userId e characterName são obrigatórios.' });
       }
       await sheets.upsertUserCharacter(userId, characterName, Number(constellation) || 0, {
-        weaponName, weaponRefinement, build,
+        weaponName, weaponRefinement, build, buildDetalhes,
       });
       return res.status(200).json({ ok: true });
     }
