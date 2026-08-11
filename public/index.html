@@ -14,7 +14,9 @@
   .btn-remove{ background:transparent; border:1px solid var(--line); color:var(--danger);
     width:30px; height:30px; border-radius:8px; cursor:pointer; }
   .add-row{ display:flex; gap:10px; margin-top:14px; }
-  .add-row select{ flex:1; }
+  .add-row select, .add-row input{ flex:1; background:var(--void-0); border:1px solid var(--line); color:var(--ink);
+    border-radius:8px; padding:10px 12px; font-size:13px; font-family:inherit; }
+  .add-row select:focus, .add-row input:focus{ border-color:var(--gold); outline:none; }
   .hint{ font-size:12.5px; color:var(--ink-faint); }
 </style>
 </head>
@@ -28,6 +30,7 @@
     <div class="navlinks">
       <a href="index.html" class="active">Perfil</a>
       <a href="draft.html">Draft</a>
+      <a href="admin.html" id="navAdminLink" class="hidden">Admin</a>
     </div>
   </div>
 
@@ -65,15 +68,34 @@
     </div>
 
     <div class="panel">
-      <h3 class="font-display" style="font-size:15px; margin-bottom:14px;">Meus Personagens &amp; Constelações</h3>
-      <div id="myCharList"></div>
+      <h3 class="font-display" style="font-size:15px; margin-bottom:6px;">UID do Genshin Impact</h3>
+      <p class="hint" style="margin-bottom:14px;">Conecte seu UID (igual o Akasha) pra importar automaticamente os personagens da sua vitrine — build, constelação e o andar do Abismo aparecem aqui.</p>
+      <div class="add-row">
+        <input type="text" id="uidInput" placeholder="Ex: 618285856" maxlength="10">
+        <button class="btn btn-primary" id="uidBtn">Buscar Perfil</button>
+      </div>
+      <div class="msg" id="uidMsg"></div>
+      <div id="uidSummary" class="hidden" style="margin-top:14px;">
+        <div class="rules-box">
+          <b id="uidNickname"></b> · Nível <span id="uidNivel"></span> · Abismo <span id="uidAbismo"></span><br>
+          <span class="hint" id="uidLastSync"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="top" style="margin-bottom:0;">
+        <h3 class="font-display" style="font-size:15px;">Meus Personagens &amp; Constelações</h3>
+        <span class="hint" id="deckPointsCounter"></span>
+      </div>
+      <div id="myCharList" style="margin-top:14px;"></div>
       <div class="add-row">
         <select id="addCharSelect"><option value="">Selecione um personagem…</option></select>
         <button class="btn btn-primary" id="addCharBtn">Adicionar</button>
       </div>
       <div class="msg" id="profileMsg"></div>
       <div class="rules-box">
-        Esta lista é só sua — visível apenas para você. A pontuação de cada personagem e arma é definida pelo administrador na planilha e usada na tela de <b>Draft</b>.
+        Esta lista é só sua — visível apenas para você. A pontuação de cada personagem e arma é definida pelo administrador no painel Admin e usada na tela de <b>Draft</b>.
       </div>
     </div>
   </section>
