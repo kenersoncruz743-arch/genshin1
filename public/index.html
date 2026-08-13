@@ -6,36 +6,38 @@
 <title>Confronto Abissal — Meu Perfil</title>
 <link rel="stylesheet" href="css/style.css">
 <style>
+  .char-row{ display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px;
+    background:rgba(255,255,255,0.03); margin-bottom:8px; }
+  .char-row .char-name{ flex:1; font-size:14px; }
   .constel-select{ background:var(--void-0); border:1px solid var(--line); color:var(--ink);
-    padding:6px 8px; border-radius:8px; font-family:'Cinzel'; font-size:12px; width:100%; margin:8px 0 6px; }
+    padding:6px 8px; border-radius:8px; font-family:'Cinzel'; font-size:12px; }
+  .btn-remove{ background:transparent; border:1px solid var(--line); color:var(--danger);
+    width:30px; height:30px; border-radius:8px; cursor:pointer; }
   .add-row{ display:flex; gap:10px; margin-top:14px; }
   .add-row select, .add-row input{ flex:1; background:var(--void-0); border:1px solid var(--line); color:var(--ink);
     border-radius:8px; padding:10px 12px; font-size:13px; font-family:inherit; }
   .add-row select:focus, .add-row input:focus{ border-color:var(--gold); outline:none; }
   .hint{ font-size:12.5px; color:var(--ink-faint); }
 
-  /* ---- grade de cards (Meus Personagens + modal de adicionar) ---- */
-  .char-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; }
-  .char-card{ position:relative; background:rgba(255,255,255,0.03); border:1px solid var(--line);
-    border-radius:12px; padding:10px; display:flex; flex-direction:column; }
-  .char-card-img{ width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:8px; background:var(--void-0); }
-  .char-card-body{ margin-top:8px; }
-  .char-card-name{ font-size:13.5px; font-weight:600; line-height:1.2; }
-  .char-card-meta{ font-size:11.5px; color:var(--ink-faint); margin-bottom:2px; }
-  .char-card-build{ font-size:11px; color:var(--ink-dim); margin-top:2px; line-height:1.3; }
-  .char-card .btn-remove{ position:absolute; top:8px; right:8px; z-index:2; background:rgba(0,0,0,0.55);
-    border:1px solid var(--line); color:var(--danger); width:26px; height:26px; border-radius:8px; cursor:pointer; }
-  .char-card.pick-card .btn-pick{ width:100%; margin-top:6px; font-size:12px; padding:8px; }
+  .char-card-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; margin-top:14px; }
+  .char-card{ background:var(--void-2); border:1px solid var(--line); border-radius:12px; padding:10px; text-align:center; position:relative; }
+  .char-card img{ width:56px; height:56px; border-radius:10px; object-fit:cover; cursor:pointer; margin-bottom:6px; }
+  .char-card .cc-name{ font-size:11.5px; cursor:pointer; display:block; margin-bottom:6px; min-height:28px; }
+  .char-card .cc-rarity{ font-size:10px; color:var(--gold-bright); position:absolute; top:8px; right:10px; }
+  .char-card .cc-check{ position:absolute; top:8px; left:10px; width:16px; height:16px; }
+  .char-card .cc-notfound{ font-size:9.5px; color:var(--danger); display:block; margin-top:2px; }
+  .char-card.cc-disabled{ opacity:0.5; }
+  .char-card .cc-weapon{ font-size:10px; color:var(--ink-faint); display:block; margin-top:2px; }
+  .char-card select.constel-select{ width:100%; margin-bottom:6px; }
+  .char-card .cc-btn{ width:100%; font-size:11px; padding:6px; border-radius:7px; border:1px solid var(--line); cursor:pointer; background:transparent; }
+  .char-card .cc-btn.add{ color:var(--ok); border-color:var(--ok); }
+  .char-card .cc-btn.remove{ color:var(--danger); border-color:var(--danger); }
+  .catalog-search{ max-width:320px; margin:14px 0; }
 
-  /* ---- modal ---- */
-  .modal{ position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex;
-    align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto; }
-  .modal.hidden{ display:none; }
-  .modal-box{ background:var(--void-1, #14121c); border:1px solid var(--line); border-radius:14px;
-    padding:20px; width:100%; max-width:900px; }
-  .modal-top{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
-  .modal-top input{ flex:1; background:var(--void-0); border:1px solid var(--line); color:var(--ink);
-    border-radius:8px; padding:10px 12px; font-size:13px; font-family:inherit; }
+  .modal-overlay{ position:fixed; inset:0; background:rgba(10,6,3,0.78); display:flex; align-items:center; justify-content:center; z-index:80; padding:20px; }
+  .modal-box{ background:linear-gradient(180deg, var(--void-2), var(--void-1)); border:1px solid var(--gold); border-radius:16px; padding:26px; max-width:400px; width:100%; }
+  .build-row{ display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:13px; }
+  .build-row span:first-child{ color:var(--ink-faint); }
 </style>
 </head>
 <body>
@@ -87,18 +89,26 @@
 
     <div class="panel">
       <h3 class="font-display" style="font-size:15px; margin-bottom:6px;">UID do Genshin Impact</h3>
-      <p class="hint" style="margin-bottom:14px;">Conecte seu UID (igual o Akasha) pra importar automaticamente os personagens da sua vitrine — build, constelação e o andar do Abismo aparecem aqui.</p>
+      <p class="hint" style="margin-bottom:14px;">Conecte seu UID (igual o Akasha) pra ver os personagens da sua vitrine — build, constelação e o andar do Abismo. Você escolhe quais quer salvar no seu deck.</p>
       <div class="add-row">
         <input type="text" id="uidInput" placeholder="Ex: 618285856" maxlength="10">
         <button class="btn btn-primary" id="uidBtn">Buscar Perfil</button>
       </div>
       <div class="msg" id="uidMsg"></div>
-      <div id="uidImportDetails" class="hidden" style="margin-top:10px; font-size:12.5px;"></div>
       <div id="uidSummary" class="hidden" style="margin-top:14px;">
         <div class="rules-box">
           <b id="uidNickname"></b> · Nível <span id="uidNivel"></span> · Abismo <span id="uidAbismo"></span><br>
           <span class="hint" id="uidLastSync"></span>
         </div>
+      </div>
+      <div id="uidPreviewWrap" class="hidden" style="margin-top:16px;">
+        <div class="top" style="margin-bottom:0;">
+          <span class="hint">Marque quem você quer salvar no deck:</span>
+          <span class="hint" id="uidPreviewCounter"></span>
+        </div>
+        <div id="uidPreviewGrid" class="char-card-grid" style="margin-top:12px;"></div>
+        <div class="center-actions"><button class="btn btn-primary" id="uidSaveBtn">Salvar Selecionados</button></div>
+        <div class="msg" id="uidSaveMsg"></div>
       </div>
     </div>
 
@@ -107,26 +117,29 @@
         <h3 class="font-display" style="font-size:15px;">Meus Personagens &amp; Constelações</h3>
         <span class="hint" id="deckPointsCounter"></span>
       </div>
-      <div id="myCharList" class="char-grid" style="margin-top:14px;"></div>
-      <div class="add-row">
-        <button class="btn btn-primary" id="openAddCharModalBtn" style="width:100%;">+ Adicionar personagem</button>
-      </div>
+      <div id="myCharList" class="char-card-grid"></div>
       <div class="msg" id="profileMsg"></div>
       <div class="rules-box">
-        Esta lista é só sua — visível apenas para você. A pontuação de cada personagem e arma é definida pelo administrador no painel Admin e usada na tela de <b>Draft</b>.
+        Esta lista é só sua — visível apenas para você. A pontuação de cada personagem e arma é definida pelo administrador no painel Admin e usada na tela de <b>Draft</b>. Clique na imagem ou no nome de um personagem pra ver a build (se tiver sido importada pelo UID).
       </div>
+    </div>
+
+    <div class="panel">
+      <h3 class="font-display" style="font-size:15px;">Adicionar Personagens</h3>
+      <div class="field catalog-search">
+        <input type="text" id="catalogSearchInput" placeholder="Buscar por nome…">
+      </div>
+      <div id="catalogGrid" class="char-card-grid"></div>
     </div>
   </section>
+</div>
 
-  <!-- MODAL: escolher personagens do catálogo (cards com busca) -->
-  <div id="addCharModal" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-top">
-        <input type="text" id="addCharSearch" placeholder="Buscar personagem…">
-        <button class="btn btn-ghost" id="closeAddCharModalBtn">Fechar</button>
-      </div>
-      <div id="addCharGrid" class="char-grid"></div>
-    </div>
+<!-- MODAL: build do personagem -->
+<div id="buildModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 class="font-display" id="buildModalTitle" style="font-size:16px; color:var(--gold-bright); text-align:center;"></h3>
+    <div id="buildModalBody" style="margin-top:14px;"></div>
+    <div class="center-actions"><button class="btn btn-ghost" id="buildModalClose">Fechar</button></div>
   </div>
 </div>
 
