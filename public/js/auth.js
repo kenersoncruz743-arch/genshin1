@@ -301,21 +301,47 @@ function openUidPreviewBuildModal(idx){
 
   if(!it.encontrado){
     body.innerHTML = `<p class="hint" style="margin-top:12px;">"${it.name}" ainda não está cadastrado no catálogo — por isso não é possível salvar nem calcular o custo em pontos.</p>`;
-  } else if(!it.weapon){
-    body.innerHTML = `
-      <div class="build-row"><span>Constelação</span><span>C${it.constellation}</span></div>
-      ${it.level ? `<div class="build-row"><span>Nível</span><span>${it.level}</span></div>` : ''}
-      <p class="hint" style="margin-top:12px;">${it.temDetalhes ? 'Sem arma equipada.' : 'Ative "Mostrar detalhes do personagem" no jogo pra trazer arma e nível completos.'}</p>
-    `;
-  } else {
-    body.innerHTML = `
-      <div class="build-row"><span>Constelação</span><span>C${it.constellation}</span></div>
-      ${it.level ? `<div class="build-row"><span>Nível</span><span>${it.level}</span></div>` : ''}
+    document.getElementById('buildModal').classList.remove('hidden');
+    return;
+  }
+
+  let html = `<div class="build-row"><span>Constelação</span><span>C${it.constellation}</span></div>`;
+  if(it.level) html += `<div class="build-row"><span>Nível</span><span>${it.level}</span></div>`;
+
+  if(it.weapon){
+    html += `
       <div class="build-row"><span>Arma</span><span>${it.weapon.name}</span></div>
       <div class="build-row"><span>Refinamento</span><span>R${it.weapon.refinement}</span></div>
       ${it.weapon.level ? `<div class="build-row"><span>Nível da arma</span><span>${it.weapon.level}</span></div>` : ''}
     `;
+  } else if(it.temDetalhes){
+    html += `<p class="hint" style="margin-top:8px;">Sem arma equipada.</p>`;
   }
+
+  if(it.artifacts && it.artifacts.length){
+    html += `<div class="hint" style="text-transform:uppercase; letter-spacing:.08em; margin:16px 0 8px;">Artefatos</div>`;
+    if(it.artifactSets && it.artifactSets.length){
+      html += `<div style="margin-bottom:10px;">${it.artifactSets.map(s => `<span class="cc-weapon" style="display:inline-block; margin:0 6px 4px 0;">${s.count}x ${s.name}</span>`).join('')}</div>`;
+    }
+    it.artifacts.forEach(a => {
+      html += `
+        <div class="build-row" style="align-items:flex-start; flex-direction:column; gap:4px; border-bottom:1px solid var(--line); padding-bottom:10px; margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; width:100%;">
+            <b>${a.slotName} <span style="color:var(--gold-bright);">+${a.level}</span></b>
+            <span class="hint">${a.rarity}★ ${a.setName}</span>
+          </div>
+          ${a.mainStat ? `<div class="hint">${a.mainStat.label}: <b>${a.mainStat.value}</b></div>` : ''}
+          ${a.subStats && a.subStats.length ? `<div class="hint" style="font-size:11px;">${a.subStats.map(s=>`${s.label} +${s.value}`).join(' · ')}</div>` : ''}
+        </div>
+      `;
+    });
+  } else if(it.temDetalhes){
+    html += `<p class="hint" style="margin-top:8px;">Nenhum artefato equipado.</p>`;
+  } else {
+    html += `<p class="hint" style="margin-top:12px;">Ative "Mostrar detalhes do personagem" no jogo pra trazer arma, artefatos e nível completos.</p>`;
+  }
+
+  body.innerHTML = html;
   document.getElementById('buildModal').classList.remove('hidden');
 }
 
