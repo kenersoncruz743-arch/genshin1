@@ -241,32 +241,79 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('buildModalClose').addEventListener('click', closeBuildModal);
 
-  document.getElementById('uidBtn').addEventListener('click', async () => {
-    const uid = document.getElementById('uidInput').value.trim();
-    const msgEl = document.getElementById('uidMsg');
-    const detailsEl = document.getElementById('uidImportDetails');
-    detailsEl.classList.add('hidden');
-    detailsEl.innerHTML = '';
-    if(!uid){ showMsg(msgEl, 'Digite seu UID.', 'error'); return; }
-    const session = await getSession();
-    showMsg(msgEl, 'Buscando perfil na Enka.Network…', '');
-    try{
-      const resultado = await importUidProfile(session.id, uid);
-      renderUidSummary(resultado.perfil);
+let UID_PREVIEW_ITENS = [];
+let UID_ATUAL = '';
 
-      showMsg(msgEl, `Importados ${resultado.importados.length} de ${resultado.importados.length + resultado.ignorados.length} personagem(ns) da vitrine.`, resultado.ignorados.length ? 'error' : 'ok');
+document.getElementById('uidBtn').addEventListener('click', async () => {
+  const uid = document.getElementById('uidInput').value.trim();
+  const msgEl = document.getElementById('uidMsg');
+  document.getElementById('uidPreviewWrap').classList.add('hidden');
+  if(!uid){ showMsg(msgEl, 'Digite seu UID.', 'error'); return; }
+  showMsg(msgEl, 'Buscando perfil na Enka.Network…', '');
+  try{
+    const resultado = await previewUidProfile(uid);
+    UID_PREVIEW_ITENS = resultado.itens;
+    UID_ATUAL = uid;
+    renderUidSummary(resultado.perfil);
+    showMsg(msgEl, `${resultado.itens.length} personagem(ns) na vitrine — marque quem quer salvar.`, 'ok');
+    renderUidPreviewGrid();
+  } catch(e){
+    showMsg(msgEl, e.message, 'error');
+  }
+});
 
-      if(resultado.ignorados.length){
-        detailsEl.classList.remove('hidden');
-        detailsEl.innerHTML = '<b style="color:var(--danger);">Não entraram:</b><ul style="margin:6px 0 0 18px; color:var(--ink-dim);">' +
-          resultado.ignorados.map(i => `<li>${i.name} — ${i.motivo}</li>`).join('') +
-          '</ul>';
-      }
-      await renderMyCharacterList(session.id);
-    } catch(e){
-      showMsg(msgEl, e.message, 'error');
-    }
+function renderUidPreviewGrid(){
+  const wrap = document.getElementById('uidPreviewWrap');
+  const grid = document.getElementById('uidPreviewGrid');
+  wrap.classList.remove('hidden');
+  grid.innerHTML = '';
+
+  UID_PREVIEW_ITENS.forEach((it, idx) => {
+    const card = document.createElement('div');
+    card.className = 'char-card' + (it.encontrado ? '' : ' cc-disabled');
+    card.innerHTML = `
+      <input type="checkbox" class="cc-check" data-idx="${idx}" ${it.encontrado ? 'checked' : 'disabled'}>
+      <span class="cc-rarity">${it.rarity}★</span>
+      ${it.image ? `<img src="${it.image}" onerror="this.style.display='none'">` : ''}
+      <span class="cc-name">${it.name}${it.encontrado ? '' : '<span class="cc-notfound">não cadastrado</span>'}</span>
+      <span class="hint">C${it.constellation} · ${it.cost} pts</span>
+      ${it.weapon ? `<span class="cc-weapon">${it.weapon.name} R${it.weapon.refinement}</span>` : '<span class="cc-weapon">sem build</span>'}
+    `;
+    grid.appendChild(card);
   });
+
+  updateUidPreviewCounter();
+  grid.querySelectorAll('.cc-check').forEach(cb => cb.addEventListener('change', updateUidPreviewCounter));
+}
+
+function updateUidPreviewCounter(){
+  const checked = [...document.querySelectorAll('#uidPreviewGrid .cc-check:checked')];
+  const total = checked.reduce((sum, cb) => sum + UID_PREVIEW_ITENS[cb.dataset.idx].cost, 0);
+  document.getElementById('uidPreviewCounter').textContent = `${checked.length} selecionado(s) · ${total} pts`;
+}
+
+document.getElementById('uidSaveBtn').addEventListener('click', async () => {
+  const msgEl = document.getElementById('uidSaveMsg');
+  const selecionados = [...document.querySelectorAll('#uidPreviewGrid .cc-check:checked')]
+    .map(cb => UID_PREVIEW_ITENS[cb.dataset.idx].name);
+
+  if(selecionados.length === 0){ showMsg(msgEl, 'Marque pelo menos um personagem.', 'error'); return; }
+
+  const session = await getSession();
+  showMsg(msgEl, 'Salvando…', '');
+  try{
+    const resultado = await saveSelectedUidCharacters(session.id, UID_ATUAL, selecionados);
+    let texto = `Salvos ${resultado.salvos.length} de ${selecionados.length} selecionado(s).`;
+    showMsg(msgEl, texto, resultado.ignorados.length ? 'error' : 'ok');
+    if(resultado.ignorados.length){
+      msgEl.innerHTML += '<ul style="margin:6px 0 0 18px;">' +
+        resultado.ignorados.map(i => `<li>${i.name} — ${i.motivo}</li>`).join('') + '</ul>';
+    }
+    await renderMyCharacterList(session.id);
+  } catch(e){
+    showMsg(msgEl, e.message, 'error');
+  }
+});
 
   document.getElementById('logoutBtn').addEventListener('click', async () => {
     await handleSignOut();
