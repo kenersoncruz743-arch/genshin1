@@ -103,11 +103,21 @@ O que isso traz:
 >
 > Personagens muito recentes podem não ser reconhecidos ainda (a tabela de nomes vem de um projeto de fãs, atualizada mas não instantânea) — nesse caso eles aparecem na lista de "ignorados" com o motivo.
 
+As **imagens de personagens e armas** (na tela de Perfil, no Draft e no painel Admin) agora vêm direto da Enka.Network quando o nome bate com o catálogo dela — não depende mais de você preencher `ImagemURL` na planilha nem de nenhuma API de terceiros instável. Se um personagem não for reconhecido pela Enka, cai de volta pro que estiver na coluna `ImagemURL` da planilha.
+
 ## 1.5 Limite de pontos do deck do jogador
 
 No painel **Admin**, em **"Limite de Pontos do Deck do Jogador"**, você define um teto de pontos pra lista "Meus Personagens" de cada jogador (some o custo de cada personagem na constelação escolhida, usando a mesma tabela `CustoC0..CustoC6`). Deixe o campo em branco pra não ter limite.
 
 Isso vale tanto pra quem adiciona manualmente quanto pra importação por UID — se importar mais personagens do que cabe no limite, os que não couberem ficam de fora (aparecem como "ignorados" com o motivo "ultrapassaria o limite"). O jogador vê um contador "X / Y pontos" na tela de Perfil o tempo todo.
+
+## 1.6 Tela de Perfil em cards + build ao clicar
+
+A lista "Meus Personagens" e o catálogo completo pra adicionar personagens agora aparecem em formato de **cards** (imagem, raridade, nome), não mais numa lista ou dropdown:
+
+- **Meus Personagens**: cada card tem a constelação (editável) e um botão **Remover**.
+- **Adicionar Personagens**: logo abaixo, uma busca com cards de todo o catálogo — clique em **Adicionar**/**Remover** direto no card.
+- **Clique na imagem ou no nome** de um personagem que já está no seu deck pra abrir um popup com a **build**: constelação, nível do personagem, arma equipada e refinamento — preenchido automaticamente quando vem da importação por UID (1.4). Personagens adicionados manualmente mostram só a constelação, já que não têm build associada.
 
 ## Abas da planilha (resumo)
 
@@ -116,7 +126,7 @@ Isso vale tanto pra quem adiciona manualmente quanto pra importação por UID �
 | `Personagens` | `Nome, Elemento, Raridade, ImagemURL, CustoC0..CustoC6` | você (custos ajustáveis no painel Admin) |
 | `Armas` | `Nome, Raridade, ImagemURL, CustoR1..CustoR5` | você (custos ajustáveis no painel Admin) |
 | `Usuarios` | `Id, Email, SenhaHash, Username, IsAdmin, CriadoEm, UID, ApelidoJogo, NivelJogo, AbismoAndar, AbismoCamara, UIDAtualizadoEm` | servidor (automático) |
-| `PersonagensUsuario` | `UserId, Personagem, Constelacao, AtualizadoEm` | servidor (automático) |
+| `PersonagensUsuario` | `UserId, Personagem, Constelacao, NivelPersonagem, ArmaNome, ArmaRefinamento, ArmaNivel, AtualizadoEm` | servidor (automático) |
 | `Partidas` | `PartidaId, CriadorId, CriadorNome, Jogador1Id, Jogador1Nome, Jogador2Id, Jogador2Nome, ConfigJSON, EstadoJSON, Status, Versao, PontosFinaisJ1, PontosFinaisJ2, Vencedor, CriadaEm, AtualizadaEm` | servidor (automático) |
 | `Config` | `Chave, Valor` (guarda o limite de pontos do deck e futuras configurações) | servidor (automático) |
 
