@@ -242,7 +242,7 @@ function openLevelModal(item){
 function closeLevelModal(){
   document.getElementById('levelModal').classList.add('hidden');
 }
-document.getElementById('levelModalCancel').addEventListener('click', closeLevelModal);
+document.getElementById('levelModalCancel')?.addEventListener('click', closeLevelModal);
 
 
 function renderTurnInfo(){
@@ -468,7 +468,7 @@ function renderAdminScorePanel(){
   winnerSelect.innerHTML = `<option value="">Empate / não definir</option><option value="${pname(0)}">${pname(0)}</option><option value="${pname(1)}">${pname(1)}</option>`;
 }
 
-document.getElementById('adminScoreBtn').addEventListener('click', async ()=>{
+document.getElementById('adminScoreBtn')?.addEventListener('click', async ()=>{
   const msgEl = document.getElementById('adminScoreMsg');
   const j1 = document.getElementById('adminScoreJ1').value;
   const j2 = document.getElementById('adminScoreJ2').value;
@@ -494,12 +494,12 @@ document.getElementById('adminScoreBtn').addEventListener('click', async ()=>{
 });
 
 /* ===================== CRIAR / ENTRAR EM PARTIDA ===================== */
-document.getElementById('chooseCreate').addEventListener('click', ()=> showOnly('createForm'));
-document.getElementById('chooseJoin').addEventListener('click', ()=> showOnly('joinForm'));
-document.getElementById('backFromCreate').addEventListener('click', ()=> showOnly('modeChoice'));
-document.getElementById('backFromJoin').addEventListener('click', ()=> showOnly('modeChoice'));
+document.getElementById('chooseCreate')?.addEventListener('click', ()=> showOnly('createForm'));
+document.getElementById('chooseJoin')?.addEventListener('click', ()=> showOnly('joinForm'));
+document.getElementById('backFromCreate')?.addEventListener('click', ()=> showOnly('modeChoice'));
+document.getElementById('backFromJoin')?.addEventListener('click', ()=> showOnly('modeChoice'));
 
-document.getElementById('createBtn').addEventListener('click', async ()=>{
+document.getElementById('createBtn')?.addEventListener('click', async ()=>{
   const msgEl = document.getElementById('createMsg');
   const cfg = {
     budget: parseInt(document.getElementById('cfgBudget').value)||550,
@@ -533,7 +533,7 @@ document.getElementById('createBtn').addEventListener('click', async ()=>{
   }
 });
 
-document.getElementById('joinBtn').addEventListener('click', async ()=>{
+document.getElementById('joinBtn')?.addEventListener('click', async ()=>{
   const msgEl = document.getElementById('joinMsg');
   const code = document.getElementById('joinCode').value.trim().toUpperCase();
   if(!code){ showMsg(msgEl, 'Digite o código da partida.', 'error'); return; }
@@ -563,9 +563,9 @@ document.getElementById('joinBtn').addEventListener('click', async ()=>{
   }
 });
 
-document.getElementById('searchBox').addEventListener('input', renderGrid);
-document.getElementById('sortBox').addEventListener('change', renderGrid);
-document.getElementById('restartBtn').addEventListener('click', ()=>{
+document.getElementById('searchBox')?.addEventListener('input', renderGrid);
+document.getElementById('sortBox')?.addEventListener('change', renderGrid);
+document.getElementById('restartBtn')?.addEventListener('click', ()=>{
   window.location.reload();
 });
 
@@ -598,4 +598,7 @@ async function boot(){
 
   showOnly('modeChoice');
 }
-boot();
+// sheets.js é compartilhado com index.html (que só usa as funções puras de
+// pontuação/draft, não a tela em si) — só inicia o boot da tela de draft
+// nas páginas que realmente têm essa tela (draft.html).
+if(document.getElementById('draft')) boot();
