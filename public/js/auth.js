@@ -117,18 +117,19 @@ async function renderMyCharacterList(userId){
         const session = await getSession();
         await deleteMyCharacter(session.id, btn.dataset.name);
         await renderMyCharacterList(session.id);
-        renderCatalogGrid(document.getElementById('catalogSearchInput').value);
+        renderCatalogGrid(document.getElementById('catalogSearchInput')?.value || '');
       });
     });
   }
 
-  renderCatalogGrid(document.getElementById('catalogSearchInput').value);
+  renderCatalogGrid(document.getElementById('catalogSearchInput')?.value || '');
 }
 
 /* ---------------- Adicionar Personagens (catálogo completo) ---------------- */
 
 function renderCatalogGrid(filter){
   const grid = document.getElementById('catalogGrid');
+  if(!grid) return; // HTML desatualizado/em cache — evita quebrar o resto da página
   const q = (filter || '').toLowerCase();
   const mineNames = new Set(MY_CHARS.map(r => r.character_name));
 
