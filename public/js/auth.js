@@ -284,6 +284,39 @@ function renderUidPreviewGrid(){
 
   updateUidPreviewCounter();
   grid.querySelectorAll('.cc-check').forEach(cb => cb.addEventListener('change', updateUidPreviewCounter));
+  grid.querySelectorAll('.char-card').forEach((card, idx) => {
+    card.addEventListener('click', (e) => {
+      if(e.target.classList.contains('cc-check')) return; // clique foi no checkbox, não abre a modal
+      openUidPreviewBuildModal(idx);
+    });
+  });
+}
+
+function openUidPreviewBuildModal(idx){
+  const it = UID_PREVIEW_ITENS[idx];
+  if(!it) return;
+
+  document.getElementById('buildModalTitle').textContent = it.name;
+  const body = document.getElementById('buildModalBody');
+
+  if(!it.encontrado){
+    body.innerHTML = `<p class="hint" style="margin-top:12px;">"${it.name}" ainda não está cadastrado no catálogo — por isso não é possível salvar nem calcular o custo em pontos.</p>`;
+  } else if(!it.weapon){
+    body.innerHTML = `
+      <div class="build-row"><span>Constelação</span><span>C${it.constellation}</span></div>
+      ${it.level ? `<div class="build-row"><span>Nível</span><span>${it.level}</span></div>` : ''}
+      <p class="hint" style="margin-top:12px;">${it.temDetalhes ? 'Sem arma equipada.' : 'Ative "Mostrar detalhes do personagem" no jogo pra trazer arma e nível completos.'}</p>
+    `;
+  } else {
+    body.innerHTML = `
+      <div class="build-row"><span>Constelação</span><span>C${it.constellation}</span></div>
+      ${it.level ? `<div class="build-row"><span>Nível</span><span>${it.level}</span></div>` : ''}
+      <div class="build-row"><span>Arma</span><span>${it.weapon.name}</span></div>
+      <div class="build-row"><span>Refinamento</span><span>R${it.weapon.refinement}</span></div>
+      ${it.weapon.level ? `<div class="build-row"><span>Nível da arma</span><span>${it.weapon.level}</span></div>` : ''}
+    `;
+  }
+  document.getElementById('buildModal').classList.remove('hidden');
 }
 
 function updateUidPreviewCounter(){
