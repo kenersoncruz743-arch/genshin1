@@ -1,20 +1,6 @@
 let CHAR_CATALOG = [];
 let DECK_LIMIT = null;
-
-// Se um elemento não existir na página (ex: HTML desatualizado, ou uma
-// versão antiga do arquivo ainda em cache), addEventListener direto
-// quebraria com "Cannot read properties of null" e travaria TODO o resto
-// do script que vem depois — inclusive coisas sem relação nenhuma, como o
-// botão de buscar perfil. Esse helper evita isso: se o elemento não
-// existir, só avisa no console e segue o app funcionando.
-function on(id, event, handler){
-  const el = document.getElementById(id);
-  if(!el){
-    console.warn(`[auth.js] elemento #${id} não encontrado na página — o HTML pode estar desatualizado.`);
-    return;
-  }
-  el.addEventListener(event, handler);
-}
+let MY_CHARS = [];
 
 function showMsg(el, text, kind){
   el.textContent = text;
@@ -74,220 +60,141 @@ function renderDeckCounter(mine){
   }
 }
 
-let MY_CHARS_CACHE = [];
+/* ---------------- Meus Personagens (cards) ---------------- */
 
 async function renderMyCharacterList(userId){
   const list = document.getElementById('myCharList');
   list.innerHTML = '<div class="hint">Carregando…</div>';
-  let mine;
   try{
-    mine = await fetchMyCharacters(userId);
+    MY_CHARS = await fetchMyCharacters(userId);
   } catch(e){
     list.innerHTML = '';
     showMsg(document.getElementById('profileMsg'), 'Não foi possível carregar seus personagens: ' + e.message, 'error');
     return;
   }
 
-  MY_CHARS_CACHE = mine;
-  renderDeckCounter(mine);
+  renderDeckCounter(MY_CHARS);
 
-  if(mine.length === 0){
-    list.innerHTML = '<div class="hint">Você ainda não adicionou nenhum personagem. Clique em "Adicionar personagem" abaixo.</div>';
-    return;
-  }
-  list.className = 'char-grid';
-  list.innerHTML = '';
-  mine.forEach(row => {
-    const catalogItem = CHAR_CATALOG.find(c => c.name === row.character_name);
-    const enkaIcon = row.build_detalhes && row.build_detalhes.icon;
-    const imgSrc = enkaIcon || (catalogItem && catalogItem.image) || '';
-    const card = document.createElement('div');
-    card.className = 'char-card' + (row.build_detalhes ? ' has-build' : '');
-    card.innerHTML = `
-      <button class="btn-remove" data-name="${row.character_name}" title="Remover">✕</button>
-      ${imgSrc ? `<img class="char-card-img" src="${imgSrc}" onerror="this.style.display='none'">` : '<div class="char-card-img"></div>'}
-      <div class="char-card-body">
-        <div class="char-card-name">${row.character_name}</div>
-        <div class="char-card-meta">${catalogItem ? `${catalogItem.rarity}★ ${catalogItem.element || ''}` : ''}</div>
-        <select class="constel-select" data-name="${row.character_name}"></select>
-        ${row.weapon_name ? `<div class="char-card-build">🗡️ ${row.weapon_name}${row.weapon_refinement ? ' (R'+row.weapon_refinement+')' : ''}</div>` : ''}
-        ${row.build ? `<div class="char-card-build">🛡️ ${row.build}</div>` : ''}
-        ${(!row.weapon_name && !row.build) ? `<div class="char-card-build hint">Sem build importada — conecte seu UID ou adicione na mão.</div>` : ''}
-        ${row.build_detalhes ? `<button class="btn btn-ghost btn-view-build" data-name="${row.character_name}">Ver build completa</button>` : ''}
-      </div>
-    `;
-    const sel = card.querySelector('.constel-select');
-    sel.innerHTML = [0,1,2,3,4,5,6].map(n => `<option value="${n}" ${n===row.constellation?'selected':''}>C${n}</option>`).join('');
-    list.appendChild(card);
-  });
-
-  list.querySelectorAll('.char-card.has-build').forEach(card => {
-    card.style.cursor = 'pointer';
-    card.addEventListener('click', (e) => {
-      if(e.target.closest('.btn-remove') || e.target.closest('.constel-select')) return;
-      const name = card.querySelector('.btn-remove').dataset.name;
-      const row = MY_CHARS_CACHE.find(r => r.character_name === name);
-      if(row) openBuildModal(row);
+  if(MY_CHARS.length === 0){
+    list.innerHTML = '<div class="hint">Você ainda não adicionou nenhum personagem — use a busca abaixo.</div>';
+  } else {
+    list.innerHTML = '';
+    MY_CHARS.forEach(row => {
+      const catalogItem = CHAR_CATALOG.find(c => c.name === row.character_name);
+      const card = document.createElement('div');
+      card.className = 'char-card';
+      card.innerHTML = `
+        <span class="cc-rarity">${catalogItem ? catalogItem.rarity+'★' : ''}</span>
+        ${catalogItem && catalogItem.image ? `<img src="${catalogItem.image}" data-name="${row.character_name}" onerror="this.style.display='none'">` : ''}
+        <span class="cc-name" data-name="${row.character_name}">${row.character_name}</span>
+        <select class="constel-select" data-name="${row.character_name}">
+          ${[0,1,2,3,4,5,6].map(n => `<option value="${n}" ${n===row.constellation?'selected':''}>C${n}</option>`).join('')}
+        </select>
+        <button class="cc-btn remove" data-name="${row.character_name}">Remover</button>
+      `;
+      list.appendChild(card);
     });
-  });
 
-  list.querySelectorAll('.btn-view-build').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const row = MY_CHARS_CACHE.find(r => r.character_name === btn.dataset.name);
-      if(row) openBuildModal(row);
+    list.querySelectorAll('img, .cc-name').forEach(el => {
+      el.addEventListener('click', () => openBuildModal(el.dataset.name));
     });
-  });
-
-  list.querySelectorAll('.constel-select').forEach(sel => {
-    const previousValue = sel.value;
-    sel.addEventListener('change', async () => {
-      const session = await getSession();
-      try{
-        await upsertMyCharacter(session.id, sel.dataset.name, parseInt(sel.value,10));
-        showMsg(document.getElementById('profileMsg'), 'Constelação atualizada.', 'ok');
+    list.querySelectorAll('.constel-select').forEach(sel => {
+      const previousValue = sel.value;
+      sel.addEventListener('change', async () => {
+        const session = await getSession();
+        try{
+          await upsertMyCharacter(session.id, sel.dataset.name, parseInt(sel.value,10));
+          showMsg(document.getElementById('profileMsg'), 'Constelação atualizada.', 'ok');
+          await renderMyCharacterList(session.id);
+        } catch(e){
+          sel.value = previousValue;
+          showMsg(document.getElementById('profileMsg'), e.message, 'error');
+        }
+      });
+    });
+    list.querySelectorAll('.cc-btn.remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const session = await getSession();
+        await deleteMyCharacter(session.id, btn.dataset.name);
         await renderMyCharacterList(session.id);
-      } catch(e){
-        sel.value = previousValue;
-        showMsg(document.getElementById('profileMsg'), e.message, 'error');
-      }
+        renderCatalogGrid(document.getElementById('catalogSearchInput').value);
+      });
     });
-  });
-  list.querySelectorAll('.btn-remove').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const session = await getSession();
-      await deleteMyCharacter(session.id, btn.dataset.name);
-      await renderMyCharacterList(session.id);
-    });
-  });
+  }
+
+  renderCatalogGrid(document.getElementById('catalogSearchInput').value);
 }
 
-/* ---------------- Modal: adicionar personagem (grade de cards com busca) ---------------- */
+/* ---------------- Adicionar Personagens (catálogo completo) ---------------- */
 
-function renderAddCharModal(filterText){
-  const grid = document.getElementById('addCharGrid');
-  const mineNames = new Set(MY_CHARS_CACHE.map(r => r.character_name));
-  const term = (filterText || '').trim().toLowerCase();
+function renderCatalogGrid(filter){
+  const grid = document.getElementById('catalogGrid');
+  const q = (filter || '').toLowerCase();
+  const mineNames = new Set(MY_CHARS.map(r => r.character_name));
 
-  const items = CHAR_CATALOG
-    .filter(c => !term || c.name.toLowerCase().includes(term))
-    .sort((a,b) => a.name.localeCompare(b.name));
+  grid.innerHTML = '';
+  CHAR_CATALOG
+    .filter(c => c.name.toLowerCase().includes(q))
+    .sort((a,b) => a.name.localeCompare(b.name))
+    .forEach(c => {
+      const already = mineNames.has(c.name);
+      const card = document.createElement('div');
+      card.className = 'char-card';
+      card.innerHTML = `
+        <span class="cc-rarity">${c.rarity}★</span>
+        ${c.image ? `<img src="${c.image}" onerror="this.style.display='none'">` : ''}
+        <span class="cc-name">${c.name}</span>
+        <button class="cc-btn ${already ? 'remove' : 'add'}" data-name="${c.name}">${already ? 'Remover' : 'Adicionar'}</button>
+      `;
+      grid.appendChild(card);
+    });
 
-  if(items.length === 0){
-    grid.innerHTML = '<div class="hint">Nenhum personagem encontrado.</div>';
-    return;
-  }
-
-  grid.innerHTML = items.map(c => {
-    const owned = mineNames.has(c.name);
-    return `
-      <div class="char-card pick-card">
-        ${c.image ? `<img class="char-card-img" src="${c.image}" onerror="this.style.display='none'">` : '<div class="char-card-img"></div>'}
-        <div class="char-card-body">
-          <div class="char-card-name">${c.name}</div>
-          <div class="char-card-meta">${c.rarity}★ ${c.element || ''}</div>
-          <button class="btn ${owned ? 'btn-ghost' : 'btn-primary'} btn-pick" data-name="${c.name}" data-owned="${owned}">
-            ${owned ? 'Remover' : '+ Adicionar'}
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  grid.querySelectorAll('.btn-pick').forEach(btn => {
+  grid.querySelectorAll('.cc-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const session = await getSession();
-      const name = btn.dataset.name;
-      const owned = btn.dataset.owned === 'true';
-      btn.disabled = true;
       try{
-        if(owned){
-          await deleteMyCharacter(session.id, name);
+        if(btn.textContent === 'Remover'){
+          await deleteMyCharacter(session.id, btn.dataset.name);
         } else {
-          await upsertMyCharacter(session.id, name, 0);
+          await upsertMyCharacter(session.id, btn.dataset.name, 0);
         }
         await renderMyCharacterList(session.id);
-        renderAddCharModal(document.getElementById('addCharSearch').value);
       } catch(e){
         showMsg(document.getElementById('profileMsg'), e.message, 'error');
-      } finally {
-        btn.disabled = false;
       }
     });
   });
 }
 
-function openAddCharModal(){
-  document.getElementById('addCharModal').classList.remove('hidden');
-  document.getElementById('addCharSearch').value = '';
-  renderAddCharModal('');
-}
+/* ---------------- Modal de build ---------------- */
 
-function closeAddCharModal(){
-  document.getElementById('addCharModal').classList.add('hidden');
-}
+function openBuildModal(characterName){
+  const row = MY_CHARS.find(r => r.character_name === characterName);
+  if(!row) return;
 
-/* ---------------- Modal: build completa (arma + 5 artefatos + stats) ---------------- */
+  document.getElementById('buildModalTitle').textContent = characterName;
+  const body = document.getElementById('buildModalBody');
 
-const RARITY_COLOR = { 5: '#e8b04b', 4: '#b48ee0', 3: '#6fa8dc' };
-
-function openBuildModal(row){
-  const b = row.build_detalhes;
-  if(!b) return;
-  const catalogItem = CHAR_CATALOG.find(c => c.name === row.character_name);
-
-  document.getElementById('buildModalTitle').textContent = `${row.character_name} · C${row.constellation}${b.level ? ' · Lv. '+b.level : ''}`;
-
-  const weaponHtml = b.weapon ? `
-    <div class="build-weapon">
-      ${b.weapon.icon ? `<img class="build-weapon-img" src="${b.weapon.icon}" onerror="this.style.display='none'">` : ''}
-      <div>
-        <div class="build-weapon-name">${b.weapon.name} <span class="hint">R${b.weapon.refinement || 1} · Lv.${b.weapon.level || '?'}</span></div>
-        <div class="build-weapon-stats">${(b.weapon.stats||[]).map(s => `<span>${s.label}: <b>${s.value}</b></span>`).join(' &nbsp;·&nbsp; ')}</div>
-      </div>
-    </div>` : '<div class="hint">Sem arma detectada.</div>';
-
-  const artifactsHtml = (b.artifacts && b.artifacts.length) ? `
-    <div class="build-artifacts">
-      ${b.artifacts.map(a => `
-        <div class="artifact-card" style="--rarity-color:${RARITY_COLOR[a.rarity] || RARITY_COLOR[5]}">
-          <div class="artifact-top">
-            ${a.icon ? `<img class="artifact-img" src="${a.icon}" onerror="this.style.display='none'">` : ''}
-            <div>
-              <div class="artifact-slot">${a.slot || ''} · +${a.level || 0}</div>
-              ${a.setName ? `<div class="artifact-set">${a.setName}</div>` : ''}
-            </div>
-          </div>
-          ${a.mainStat ? `<div class="artifact-main">${a.mainStat.label}<b>${a.mainStat.value}</b></div>` : ''}
-          <div class="artifact-subs">
-            ${(a.subStats||[]).map(s => `<div>+ ${s.label} <b>${s.value}</b></div>`).join('')}
-          </div>
-        </div>
-      `).join('')}
-    </div>` : '<div class="hint">Sem artefatos detalhados — reimporte com "Mostrar detalhes" ativado no jogo.</div>';
-
-  const statsHtml = (b.stats && b.stats.length) ? `
-    <div class="build-stats-grid">
-      ${b.stats.map(s => `<div class="build-stat"><span>${s.label}</span><b>${s.value}</b></div>`).join('')}
-    </div>` : '';
-
-  document.getElementById('buildModalBody').innerHTML = `
-    <div class="build-header">
-      ${(b.icon || (catalogItem && catalogItem.image)) ? `<img class="build-portrait" src="${b.icon || catalogItem.image}" onerror="this.style.display='none'">` : ''}
-      <div style="flex:1;">
-        ${weaponHtml}
-        ${statsHtml}
-      </div>
-    </div>
-    ${artifactsHtml}
-  `;
-
+  if(!row.weapon){
+    body.innerHTML = `
+      <div class="build-row"><span>Constelação</span><span>C${row.constellation}</span></div>
+      <p class="hint" style="margin-top:12px;">Sem build importada ainda — conecte o UID no topo da página pra trazer arma e nível automaticamente.</p>
+    `;
+  } else {
+    body.innerHTML = `
+      <div class="build-row"><span>Constelação</span><span>C${row.constellation}</span></div>
+      ${row.characterLevel ? `<div class="build-row"><span>Nível</span><span>${row.characterLevel}</span></div>` : ''}
+      <div class="build-row"><span>Arma</span><span>${row.weapon.name}</span></div>
+      <div class="build-row"><span>Refinamento</span><span>R${row.weapon.refinement}</span></div>
+      ${row.weapon.level ? `<div class="build-row"><span>Nível da arma</span><span>${row.weapon.level}</span></div>` : ''}
+    `;
+  }
   document.getElementById('buildModal').classList.remove('hidden');
 }
-
 function closeBuildModal(){
   document.getElementById('buildModal').classList.add('hidden');
 }
+
 
 document.addEventListener('DOMContentLoaded', async () => {
   const session = await getSession();
@@ -297,7 +204,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(link) link.classList.remove('hidden');
   }
 
-  on('toggleModeBtn', 'click', () => {
+  document.getElementById('toggleModeBtn').addEventListener('click', () => {
     const isSignup = document.getElementById('authForm').dataset.mode === 'signup';
     document.getElementById('authForm').dataset.mode = isSignup ? 'login' : 'signup';
     document.getElementById('usernameField').classList.toggle('hidden', isSignup);
@@ -305,7 +212,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('toggleModeBtn').textContent = isSignup ? 'Não tem conta? Criar uma' : 'Já tem conta? Entrar';
   });
 
-  on('authForm', 'submit', async (e) => {
+  document.getElementById('authForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const mode = document.getElementById('authForm').dataset.mode || 'signup';
     const email = document.getElementById('authEmail').value.trim();
@@ -328,21 +235,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  on('openAddCharModalBtn', 'click', openAddCharModal);
-  on('closeAddCharModalBtn', 'click', closeAddCharModal);
-  on('addCharModal', 'click', (e) => {
-    if(e.target.id === 'addCharModal') closeAddCharModal();
+  document.getElementById('catalogSearchInput').addEventListener('input', (e) => {
+    renderCatalogGrid(e.target.value);
   });
-  on('addCharSearch', 'input', (e) => {
-    renderAddCharModal(e.target.value);
-  });
+  document.getElementById('buildModalClose').addEventListener('click', closeBuildModal);
 
-  on('closeBuildModalBtn', 'click', closeBuildModal);
-  on('buildModal', 'click', (e) => {
-    if(e.target.id === 'buildModal') closeBuildModal();
-  });
-
-  on('uidBtn', 'click', async () => {
+  document.getElementById('uidBtn').addEventListener('click', async () => {
     const uid = document.getElementById('uidInput').value.trim();
     const msgEl = document.getElementById('uidMsg');
     const detailsEl = document.getElementById('uidImportDetails');
@@ -369,7 +267,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  on('logoutBtn', 'click', async () => {
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
     await handleSignOut();
     location.reload();
   });
