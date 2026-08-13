@@ -25,8 +25,8 @@ module.exports = async function partidaHandler(req, res) {
 
     if (body.action === 'join') {
       const { partidaId, userId, userName } = body;
-      const match = await sheets.joinMatch({ partidaId, userId, userName });
-      return res.status(200).json({ ok: true, match });
+      const { match, papel } = await sheets.joinMatch({ partidaId, userId, userName });
+      return res.status(200).json({ ok: true, match, papel });
     }
 
     if (body.action === 'pick') {
