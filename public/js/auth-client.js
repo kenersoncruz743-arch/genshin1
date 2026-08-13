@@ -59,11 +59,11 @@ async function fetchMyCharacters(userId) {
   return (json.rows || []).sort((a, b) => a.character_name.localeCompare(b.character_name));
 }
 
-async function upsertMyCharacter(userId, characterName, constellation, extras) {
+async function upsertMyCharacter(userId, characterName, constellation) {
   const res = await fetch('/api/personagens', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(Object.assign({ userId, characterName, constellation }, extras || {})),
+    body: JSON.stringify({ userId, characterName, constellation }),
   });
   const json = await res.json();
   if (!json.ok) throw new Error(json.msg || 'Erro ao salvar personagem.');
@@ -81,14 +81,25 @@ async function deleteMyCharacter(userId, characterName) {
 
 /* ---------------- UID do Genshin (Enka.Network) ---------------- */
 
-async function importUidProfile(userId, uid) {
+async function previewUidProfile(uid) {
   const res = await fetch('/api/enka', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'importarUID', userId, uid }),
+    body: JSON.stringify({ action: 'previewUID', uid }),
   });
   const json = await res.json();
   if (!json.ok) throw new Error(json.msg || 'Erro ao buscar UID.');
+  return json;
+}
+
+async function saveSelectedUidCharacters(userId, uid, selecionados) {
+  const res = await fetch('/api/enka', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'salvarSelecionados', userId, uid, selecionados }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.msg || 'Erro ao salvar personagens.');
   return json;
 }
 
