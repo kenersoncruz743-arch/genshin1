@@ -9,10 +9,17 @@ module.exports = async function enkaHandler(req, res) {
   const body = req.body || {};
 
   try {
-    if (body.action === 'importarUID') {
-      const { userId, uid } = body;
+    if (body.action === 'previewUID') {
+      const { uid } = body;
+      if (!uid) throw new Error('uid é obrigatório.');
+      const resultado = await sheets.previewUID(uid);
+      return res.status(200).json({ ok: true, ...resultado });
+    }
+
+    if (body.action === 'salvarSelecionados') {
+      const { userId, uid, selecionados } = body;
       if (!userId || !uid) throw new Error('userId e uid são obrigatórios.');
-      const resultado = await sheets.importFromUID(userId, uid);
+      const resultado = await sheets.saveSelectedFromUID(userId, uid, selecionados || []);
       return res.status(200).json({ ok: true, ...resultado });
     }
 
