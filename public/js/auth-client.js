@@ -79,6 +79,24 @@ async function deleteMyCharacter(userId, characterName) {
   if (!json.ok) throw new Error(json.msg || 'Erro ao remover personagem.');
 }
 
+/* ---------------- Catálogo do jogo (Personagens / Armas) ---------------- */
+
+let _catalogCache = null;
+async function _loadCatalog() {
+  if (_catalogCache) return _catalogCache;
+  const res = await fetch('/api/personagens?tipo=catalogo');
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.msg || 'Erro ao carregar o catálogo.');
+  _catalogCache = { characters: json.characters || [], weapons: json.weapons || [] };
+  return _catalogCache;
+}
+async function loadCharacters() {
+  return (await _loadCatalog()).characters;
+}
+async function loadWeapons() {
+  return (await _loadCatalog()).weapons;
+}
+
 /* ---------------- UID do Genshin (Enka.Network) ---------------- */
 
 async function previewUidProfile(uid) {
