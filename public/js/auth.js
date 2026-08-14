@@ -211,6 +211,40 @@ function closeBuildModal(){
   document.getElementById('buildModal').classList.add('hidden');
 }
 
+// Monta o HTML dos cards de artefato — usado tanto na prévia do UID quanto
+// na modal de "Meus Personagens" (depois de salvo). Precisa ficar no escopo
+// de topo do arquivo (fora do DOMContentLoaded) porque openBuildModal, que
+// também está no escopo de topo, chama essa função.
+function renderArtifactsHtml(artifacts, artifactSets){
+  let html = `<div class="hint" style="text-transform:uppercase; letter-spacing:.08em; margin:16px 0 8px;">Artefatos</div>`;
+  if(artifactSets && artifactSets.length){
+    html += `<div style="margin-bottom:10px;">${artifactSets.map(s => `<span class="cc-weapon" style="display:inline-block; margin:0 6px 4px 0;">${s.count}x ${s.name}${s.count>=4?' (4pç)':s.count>=2?' (2pç)':''}</span>`).join('')}</div>`;
+  }
+  html += `<div style="display:flex; flex-direction:column; gap:8px;">`;
+  artifacts.forEach(a => {
+    const rTier = a.rarity>=5?'5':a.rarity===4?'4':'3';
+    const borderColor = `var(--r${rTier}-a)`;
+    html += `
+      <div style="display:flex; gap:10px; padding:10px; border:1px solid ${borderColor}; border-radius:10px; background:var(--void-2);">
+        <div style="flex:0 0 auto; width:52px; height:52px; border-radius:8px; background:var(--void-1); display:flex; align-items:center; justify-content:center; position:relative;">
+          ${a.image ? `<img src="${a.image}" style="width:44px;height:44px;object-fit:contain;" onerror="this.style.display='none'">` : ''}
+          <span style="position:absolute; bottom:-4px; right:-4px; background:var(--void-0); color:var(--gold-bright); font-size:10px; font-weight:700; padding:1px 4px; border-radius:6px; border:1px solid ${borderColor};">+${a.level}</span>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; justify-content:space-between; gap:8px;">
+            <b style="font-size:12.5px;">${a.slotName}</b>
+            <span class="hint" style="font-size:10.5px; white-space:nowrap;">${a.rarity}★</span>
+          </div>
+          <div class="hint" style="font-size:11px; margin-bottom:4px;">${a.setName}</div>
+          ${a.mainStat ? `<div style="font-size:13px; margin-bottom:4px;">${a.mainStat.label} <b style="color:var(--gold-bright);">${a.mainStat.value}</b></div>` : ''}
+          ${a.subStats && a.subStats.length ? `<div style="display:flex; flex-wrap:wrap; gap:4px;">${a.subStats.map(s=>`<span style="font-size:10.5px; background:var(--void-1); border:1px solid var(--line); border-radius:6px; padding:2px 6px; color:var(--ink-dim);">${s.label} +${s.value}</span>`).join('')}</div>` : ''}
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  return html;
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   const session = await getSession();
@@ -305,39 +339,6 @@ function renderUidPreviewGrid(){
       openUidPreviewBuildModal(idx);
     });
   });
-}
-
-// Monta o HTML dos cards de artefato — usado tanto na prévia do UID quanto
-// na modal de "Meus Personagens" (depois de salvo).
-function renderArtifactsHtml(artifacts, artifactSets){
-  let html = `<div class="hint" style="text-transform:uppercase; letter-spacing:.08em; margin:16px 0 8px;">Artefatos</div>`;
-  if(artifactSets && artifactSets.length){
-    html += `<div style="margin-bottom:10px;">${artifactSets.map(s => `<span class="cc-weapon" style="display:inline-block; margin:0 6px 4px 0;">${s.count}x ${s.name}${s.count>=4?' (4pç)':s.count>=2?' (2pç)':''}</span>`).join('')}</div>`;
-  }
-  html += `<div style="display:flex; flex-direction:column; gap:8px;">`;
-  artifacts.forEach(a => {
-    const rTier = a.rarity>=5?'5':a.rarity===4?'4':'3';
-    const borderColor = `var(--r${rTier}-a)`;
-    html += `
-      <div style="display:flex; gap:10px; padding:10px; border:1px solid ${borderColor}; border-radius:10px; background:var(--void-2);">
-        <div style="flex:0 0 auto; width:52px; height:52px; border-radius:8px; background:var(--void-1); display:flex; align-items:center; justify-content:center; position:relative;">
-          ${a.image ? `<img src="${a.image}" style="width:44px;height:44px;object-fit:contain;" onerror="this.style.display='none'">` : ''}
-          <span style="position:absolute; bottom:-4px; right:-4px; background:var(--void-0); color:var(--gold-bright); font-size:10px; font-weight:700; padding:1px 4px; border-radius:6px; border:1px solid ${borderColor};">+${a.level}</span>
-        </div>
-        <div style="flex:1; min-width:0;">
-          <div style="display:flex; justify-content:space-between; gap:8px;">
-            <b style="font-size:12.5px;">${a.slotName}</b>
-            <span class="hint" style="font-size:10.5px; white-space:nowrap;">${a.rarity}★</span>
-          </div>
-          <div class="hint" style="font-size:11px; margin-bottom:4px;">${a.setName}</div>
-          ${a.mainStat ? `<div style="font-size:13px; margin-bottom:4px;">${a.mainStat.label} <b style="color:var(--gold-bright);">${a.mainStat.value}</b></div>` : ''}
-          ${a.subStats && a.subStats.length ? `<div style="display:flex; flex-wrap:wrap; gap:4px;">${a.subStats.map(s=>`<span style="font-size:10.5px; background:var(--void-1); border:1px solid var(--line); border-radius:6px; padding:2px 6px; color:var(--ink-dim);">${s.label} +${s.value}</span>`).join('')}</div>` : ''}
-        </div>
-      </div>
-    `;
-  });
-  html += `</div>`;
-  return html;
 }
 
 function openUidPreviewBuildModal(idx){
