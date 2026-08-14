@@ -142,3 +142,12 @@ async function getDeckPointLimit() {
   if (!json.ok) return null;
   return json.limit;
 }
+
+/* ---------------- Calculadora de dano (talentos via Project Amber) ---------------- */
+
+async function fetchCharacterTalents(characterName) {
+  const res = await fetch('/api/damage?personagem=' + encodeURIComponent(characterName));
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.msg || 'Erro ao buscar talentos.');
+  return json.talents || [];
+}
