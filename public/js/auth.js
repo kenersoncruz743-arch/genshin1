@@ -174,22 +174,35 @@ function openBuildModal(characterName){
   if(!row) return;
 
   document.getElementById('buildModalTitle').textContent = characterName;
+  const photo = document.getElementById('buildModalPhoto');
+  const catalogItem = CHAR_CATALOG.find(c => c.name === characterName);
+  if(catalogItem && catalogItem.image){
+    photo.src = catalogItem.image;
+    photo.alt = characterName;
+    photo.style.display = 'inline-block';
+  } else {
+    photo.style.display = 'none';
+  }
   const body = document.getElementById('buildModalBody');
 
+  let html = `<div class="build-row"><span>Constelação</span><span>C${row.constellation}</span></div>`;
+
   if(!row.weapon){
-    body.innerHTML = `
-      <div class="build-row"><span>Constelação</span><span>C${row.constellation}</span></div>
-      <p class="hint" style="margin-top:12px;">Sem build importada ainda — conecte o UID no topo da página pra trazer arma e nível automaticamente.</p>
-    `;
+    html += `<p class="hint" style="margin-top:12px;">Sem build importada ainda — conecte o UID no topo da página pra trazer arma e nível automaticamente.</p>`;
   } else {
-    body.innerHTML = `
-      <div class="build-row"><span>Constelação</span><span>C${row.constellation}</span></div>
+    html += `
       ${row.characterLevel ? `<div class="build-row"><span>Nível</span><span>${row.characterLevel}</span></div>` : ''}
       <div class="build-row"><span>Arma</span><span>${row.weapon.name}</span></div>
       <div class="build-row"><span>Refinamento</span><span>R${row.weapon.refinement}</span></div>
       ${row.weapon.level ? `<div class="build-row"><span>Nível da arma</span><span>${row.weapon.level}</span></div>` : ''}
     `;
   }
+
+  if(row.artifacts && row.artifacts.length){
+    html += renderArtifactsHtml(row.artifacts);
+  }
+
+  body.innerHTML = html;
   document.getElementById('buildModal').classList.remove('hidden');
 }
 function closeBuildModal(){
@@ -292,11 +305,52 @@ function renderUidPreviewGrid(){
   });
 }
 
+// Monta o HTML dos cards de artefato — usado tanto na prévia do UID quanto
+// na modal de "Meus Personagens" (depois de salvo).
+function renderArtifactsHtml(artifacts, artifactSets){
+  let html = `<div class="hint" style="text-transform:uppercase; letter-spacing:.08em; margin:16px 0 8px;">Artefatos</div>`;
+  if(artifactSets && artifactSets.length){
+    html += `<div style="margin-bottom:10px;">${artifactSets.map(s => `<span class="cc-weapon" style="display:inline-block; margin:0 6px 4px 0;">${s.count}x ${s.name}${s.count>=4?' (4pç)':s.count>=2?' (2pç)':''}</span>`).join('')}</div>`;
+  }
+  html += `<div style="display:flex; flex-direction:column; gap:8px;">`;
+  artifacts.forEach(a => {
+    const rTier = a.rarity>=5?'5':a.rarity===4?'4':'3';
+    const borderColor = `var(--r${rTier}-a)`;
+    html += `
+      <div style="display:flex; gap:10px; padding:10px; border:1px solid ${borderColor}; border-radius:10px; background:var(--void-2);">
+        <div style="flex:0 0 auto; width:52px; height:52px; border-radius:8px; background:var(--void-1); display:flex; align-items:center; justify-content:center; position:relative;">
+          ${a.image ? `<img src="${a.image}" style="width:44px;height:44px;object-fit:contain;" onerror="this.style.display='none'">` : ''}
+          <span style="position:absolute; bottom:-4px; right:-4px; background:var(--void-0); color:var(--gold-bright); font-size:10px; font-weight:700; padding:1px 4px; border-radius:6px; border:1px solid ${borderColor};">+${a.level}</span>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; justify-content:space-between; gap:8px;">
+            <b style="font-size:12.5px;">${a.slotName}</b>
+            <span class="hint" style="font-size:10.5px; white-space:nowrap;">${a.rarity}★</span>
+          </div>
+          <div class="hint" style="font-size:11px; margin-bottom:4px;">${a.setName}</div>
+          ${a.mainStat ? `<div style="font-size:13px; margin-bottom:4px;">${a.mainStat.label} <b style="color:var(--gold-bright);">${a.mainStat.value}</b></div>` : ''}
+          ${a.subStats && a.subStats.length ? `<div style="display:flex; flex-wrap:wrap; gap:4px;">${a.subStats.map(s=>`<span style="font-size:10.5px; background:var(--void-1); border:1px solid var(--line); border-radius:6px; padding:2px 6px; color:var(--ink-dim);">${s.label} +${s.value}</span>`).join('')}</div>` : ''}
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  return html;
+}
+
 function openUidPreviewBuildModal(idx){
   const it = UID_PREVIEW_ITENS[idx];
   if(!it) return;
 
   document.getElementById('buildModalTitle').textContent = it.name;
+  const photo = document.getElementById('buildModalPhoto');
+  if(it.image){
+    photo.src = it.image;
+    photo.alt = it.name;
+    photo.style.display = 'inline-block';
+  } else {
+    photo.style.display = 'none';
+  }
   const body = document.getElementById('buildModalBody');
 
   if(!it.encontrado){
@@ -305,7 +359,31 @@ function openUidPreviewBuildModal(idx){
     return;
   }
 
-  let html = `<div class="build-row"><span>Constelação</span><span>C${it.constellation}</span></div>`;
+  let html = '';
+
+  // Resumo dos status finais (já vem calculado pronto pela Enka: base +
+  // arma + artefato + conjunto — o mesmo número que aparece no jogo).
+  if(it.stats){
+    const s = it.stats;
+    const statCell = (label, value) => `
+      <div style="background:var(--void-1); border:1px solid var(--line); border-radius:8px; padding:6px 4px; text-align:center;">
+        <div class="hint" style="font-size:9.5px; text-transform:uppercase; letter-spacing:.04em;">${label}</div>
+        <div style="font-size:13px; font-weight:700; color:var(--ink);">${value}</div>
+      </div>
+    `;
+    html += `<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:14px;">
+      ${statCell('HP', s.hp.toLocaleString('pt-BR'))}
+      ${statCell('ATQ', s.atk.toLocaleString('pt-BR'))}
+      ${statCell('DEF', s.def.toLocaleString('pt-BR'))}
+      ${statCell('Dom. Elem.', s.em.toLocaleString('pt-BR'))}
+      ${statCell('Crít.', s.critRate + '%')}
+      ${statCell('Dano Crít.', s.critDmg + '%')}
+      ${statCell('Recarga', s.energyRecharge + '%')}
+      ${statCell('Valor Crít.', s.critValue)}
+    </div>`;
+  }
+
+  html += `<div class="build-row"><span>Constelação</span><span>C${it.constellation}</span></div>`;
   if(it.level) html += `<div class="build-row"><span>Nível</span><span>${it.level}</span></div>`;
 
   if(it.weapon){
@@ -319,33 +397,7 @@ function openUidPreviewBuildModal(idx){
   }
 
   if(it.artifacts && it.artifacts.length){
-    html += `<div class="hint" style="text-transform:uppercase; letter-spacing:.08em; margin:16px 0 8px;">Artefatos</div>`;
-    if(it.artifactSets && it.artifactSets.length){
-      html += `<div style="margin-bottom:10px;">${it.artifactSets.map(s => `<span class="cc-weapon" style="display:inline-block; margin:0 6px 4px 0;">${s.count}x ${s.name}${s.count>=4?' (4pç)':s.count>=2?' (2pç)':''}</span>`).join('')}</div>`;
-    }
-    html += `<div style="display:flex; flex-direction:column; gap:8px;">`;
-    it.artifacts.forEach(a => {
-      const rTier = a.rarity>=5?'5':a.rarity===4?'4':'3';
-      const borderColor = `var(--r${rTier}-a)`;
-      html += `
-        <div style="display:flex; gap:10px; padding:10px; border:1px solid ${borderColor}; border-radius:10px; background:var(--void-2);">
-          <div style="flex:0 0 auto; width:52px; height:52px; border-radius:8px; background:var(--void-1); display:flex; align-items:center; justify-content:center; position:relative;">
-            ${a.image ? `<img src="${a.image}" style="width:44px;height:44px;object-fit:contain;" onerror="this.style.display='none'">` : ''}
-            <span style="position:absolute; bottom:-4px; right:-4px; background:var(--void-0); color:var(--gold-bright); font-size:10px; font-weight:700; padding:1px 4px; border-radius:6px; border:1px solid ${borderColor};">+${a.level}</span>
-          </div>
-          <div style="flex:1; min-width:0;">
-            <div style="display:flex; justify-content:space-between; gap:8px;">
-              <b style="font-size:12.5px;">${a.slotName}</b>
-              <span class="hint" style="font-size:10.5px; white-space:nowrap;">${a.rarity}★</span>
-            </div>
-            <div class="hint" style="font-size:11px; margin-bottom:4px;">${a.setName}</div>
-            ${a.mainStat ? `<div style="font-size:13px; margin-bottom:4px;">${a.mainStat.label} <b style="color:var(--gold-bright);">${a.mainStat.value}</b></div>` : ''}
-            ${a.subStats && a.subStats.length ? `<div style="display:flex; flex-wrap:wrap; gap:4px;">${a.subStats.map(s=>`<span style="font-size:10.5px; background:var(--void-1); border:1px solid var(--line); border-radius:6px; padding:2px 6px; color:var(--ink-dim);">${s.label} +${s.value}</span>`).join('')}</div>` : ''}
-          </div>
-        </div>
-      `;
-    });
-    html += `</div>`;
+    html += renderArtifactsHtml(it.artifacts, it.artifactSets);
   } else if(it.temDetalhes){
     html += `<p class="hint" style="margin-top:8px;">Nenhum artefato equipado.</p>`;
   } else {
