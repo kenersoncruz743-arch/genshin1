@@ -176,12 +176,14 @@ function openBuildModal(characterName){
   document.getElementById('buildModalTitle').textContent = characterName;
   const photo = document.getElementById('buildModalPhoto');
   const catalogItem = CHAR_CATALOG.find(c => c.name === characterName);
-  if(catalogItem && catalogItem.image){
-    photo.src = catalogItem.image;
-    photo.alt = characterName;
-    photo.style.display = 'inline-block';
-  } else {
-    photo.style.display = 'none';
+  if(photo){
+    if(catalogItem && catalogItem.image){
+      photo.src = catalogItem.image;
+      photo.alt = characterName;
+      photo.style.display = 'inline-block';
+    } else {
+      photo.style.display = 'none';
+    }
   }
   const body = document.getElementById('buildModalBody');
 
@@ -344,12 +346,14 @@ function openUidPreviewBuildModal(idx){
 
   document.getElementById('buildModalTitle').textContent = it.name;
   const photo = document.getElementById('buildModalPhoto');
-  if(it.image){
-    photo.src = it.image;
-    photo.alt = it.name;
-    photo.style.display = 'inline-block';
-  } else {
-    photo.style.display = 'none';
+  if(photo){
+    if(it.image){
+      photo.src = it.image;
+      photo.alt = it.name;
+      photo.style.display = 'inline-block';
+    } else {
+      photo.style.display = 'none';
+    }
   }
   const body = document.getElementById('buildModalBody');
 
