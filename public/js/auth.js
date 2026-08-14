@@ -200,6 +200,10 @@ function openBuildModal(characterName){
     `;
   }
 
+  if(row.stats){
+    html = renderStatsGridHtml(row.stats) + html;
+  }
+
   if(row.artifacts && row.artifacts.length){
     html += renderArtifactsHtml(row.artifacts);
   }
@@ -209,6 +213,28 @@ function openBuildModal(characterName){
 }
 function closeBuildModal(){
   document.getElementById('buildModal').classList.add('hidden');
+}
+
+// Monta a grade de status finais (HP/ATQ/DEF/etc) — usado tanto na prévia
+// do UID quanto na modal de "Meus Personagens" (depois de salvo). Mesmo
+// motivo de escopo do renderArtifactsHtml logo abaixo.
+function renderStatsGridHtml(s){
+  const statCell = (label, value) => `
+    <div style="background:var(--void-1); border:1px solid var(--line); border-radius:8px; padding:6px 4px; text-align:center;">
+      <div class="hint" style="font-size:9.5px; text-transform:uppercase; letter-spacing:.04em;">${label}</div>
+      <div style="font-size:13px; font-weight:700; color:var(--ink);">${value}</div>
+    </div>
+  `;
+  return `<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:14px;">
+    ${statCell('HP', s.hp.toLocaleString('pt-BR'))}
+    ${statCell('ATQ', s.atk.toLocaleString('pt-BR'))}
+    ${statCell('DEF', s.def.toLocaleString('pt-BR'))}
+    ${statCell('Dom. Elem.', s.em.toLocaleString('pt-BR'))}
+    ${statCell('Crít.', s.critRate + '%')}
+    ${statCell('Dano Crít.', s.critDmg + '%')}
+    ${statCell('Recarga', s.energyRecharge + '%')}
+    ${statCell('Valor Crít.', s.critValue)}
+  </div>`;
 }
 
 // Monta o HTML dos cards de artefato — usado tanto na prévia do UID quanto
@@ -369,23 +395,7 @@ function openUidPreviewBuildModal(idx){
   // Resumo dos status finais (já vem calculado pronto pela Enka: base +
   // arma + artefato + conjunto — o mesmo número que aparece no jogo).
   if(it.stats){
-    const s = it.stats;
-    const statCell = (label, value) => `
-      <div style="background:var(--void-1); border:1px solid var(--line); border-radius:8px; padding:6px 4px; text-align:center;">
-        <div class="hint" style="font-size:9.5px; text-transform:uppercase; letter-spacing:.04em;">${label}</div>
-        <div style="font-size:13px; font-weight:700; color:var(--ink);">${value}</div>
-      </div>
-    `;
-    html += `<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:14px;">
-      ${statCell('HP', s.hp.toLocaleString('pt-BR'))}
-      ${statCell('ATQ', s.atk.toLocaleString('pt-BR'))}
-      ${statCell('DEF', s.def.toLocaleString('pt-BR'))}
-      ${statCell('Dom. Elem.', s.em.toLocaleString('pt-BR'))}
-      ${statCell('Crít.', s.critRate + '%')}
-      ${statCell('Dano Crít.', s.critDmg + '%')}
-      ${statCell('Recarga', s.energyRecharge + '%')}
-      ${statCell('Valor Crít.', s.critValue)}
-    </div>`;
+    html += renderStatsGridHtml(it.stats);
   }
 
   html += `<div class="build-row"><span>Constelação</span><span>C${it.constellation}</span></div>`;
