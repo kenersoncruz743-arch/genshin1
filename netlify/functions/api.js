@@ -4,6 +4,7 @@ const personagensHandler = require('../../api/personagens');
 const partidaHandler = require('../../api/partida');
 const adminHandler = require('../../api/admin');
 const enkaHandler = require('../../api/enka');
+const damageHandler = require('../../api/damage');
 
 function buildReq(event) {
   const body = event.body
@@ -62,6 +63,8 @@ exports.handler = async (event) => {
       await adminHandler(req, res);
     } else if (path.startsWith('/enka')) {
       await enkaHandler(req, res);
+    } else if (path.startsWith('/damage')) {
+      await damageHandler(req, res);
     } else {
       return { statusCode: 404, headers, body: JSON.stringify({ ok: false, msg: 'Rota não encontrada: ' + path }) };
     }
