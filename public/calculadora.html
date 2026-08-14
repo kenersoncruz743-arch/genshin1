@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confronto Abissal — Calculadora de Dano</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .team-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:16px; }
+  .slot{ background:var(--void-2); border:1px solid var(--line); border-radius:14px; padding:14px; min-height:120px; }
+  .slot select{ width:100%; background:var(--void-0); border:1px solid var(--line); color:var(--ink);
+    padding:9px 10px; border-radius:9px; font-family:'Manrope'; font-size:13px; }
+  .slot-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .slot-head img{ width:40px; height:40px; border-radius:8px; object-fit:cover; }
+  .slot-head b{ font-size:13.5px; }
+  .slot-empty{ color:var(--ink-faint); font-size:12.5px; text-align:center; padding:24px 0; }
+  .talent-row{ margin-top:10px; }
+  .talent-row label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-dim); margin-bottom:4px; }
+  .mini-row{ display:flex; gap:8px; }
+  .mini-row > *{ flex:1; }
+  .dmg-result{ margin-top:12px; background:var(--void-1); border:1px solid var(--gold); border-radius:10px; padding:10px; text-align:center; }
+  .dmg-result .num{ font-family:'Cinzel'; font-size:22px; font-weight:700; color:var(--gold-bright); }
+  .dmg-result .lbl{ font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.06em; }
+  .global-panel{ display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; }
+  .global-panel .field{ max-width:170px; }
+  .team-total{ margin-top:22px; text-align:center; }
+  .team-total .num{ font-family:'Cinzel'; font-size:34px; color:var(--gold-bright); font-weight:800; }
+  .warn-box{ font-size:12px; color:var(--ink-faint); background:rgba(224,87,122,0.08); border:1px solid rgba(224,87,122,0.3);
+    border-radius:10px; padding:10px 12px; margin-top:16px; }
+  .talent-desc{ font-size:11px; color:var(--ink-faint); margin-top:6px; line-height:1.5; max-height:60px; overflow-y:auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div><h1>Confronto Abissal</h1><p>Calculadora de Dano</p></div>
+    </div>
+    <div class="navlinks">
+      <a href="index.html">Perfil</a>
+      <a href="draft.html">Draft</a>
+      <a href="calculadora.html" class="active">Calculadora</a>
+      <a href="admin.html" id="navAdminLink" class="hidden">Admin</a>
+    </div>
+  </div>
+
+  <section id="loginNeeded" class="panel hidden" style="max-width:460px; margin:0 auto; text-align:center;">
+    <p class="hint">Você precisa estar logado pra montar o time — faça login na aba <a href="index.html" style="color:var(--gold-bright);">Perfil</a> primeiro.</p>
+  </section>
+
+  <section id="calcBox" class="panel hidden">
+    <h2 class="font-display" style="font-size:18px; color:var(--gold-bright); margin-bottom:6px;">Monte seu time</h2>
+    <p class="hint" style="margin-bottom:14px;">Escolha até 4 personagens salvos no seu Perfil (com arma, artefatos e status já importados do UID). Pra cada um, selecione um talento e o nível pra estimar o dano de um golpe.</p>
+
+    <div class="global-panel">
+      <div class="field">
+        <label>Nível do inimigo</label>
+        <input type="number" id="enemyLevel" value="100" min="1" max="200">
+      </div>
+      <div class="field">
+        <label>RES elemental do inimigo (%)</label>
+        <input type="number" id="enemyRes" value="10" step="1">
+      </div>
+      <div class="field">
+        <label>Crítico</label>
+        <select id="critMode">
+          <option value="avg">Média (Taxa × Dano)</option>
+          <option value="always">Sempre crítico</option>
+          <option value="never">Nunca crítico</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="team-grid" id="teamGrid"></div>
+
+    <div class="team-total">
+      <div class="lbl hint">Dano total estimado do time (1 uso de cada talento selecionado)</div>
+      <div class="num" id="teamTotal">0</div>
+    </div>
+
+    <div class="warn-box">
+      Estimativa aproximada: usa o multiplicador oficial de cada talento (dados públicos da
+      <a href="https://gi.yatta.moe" target="_blank" style="color:var(--gold-bright);">Project Amber</a>),
+      aplicado sobre o status já salvo no seu Perfil. Não inclui reações elementais (Vaporizar,
+      Amplificar, etc.), buffs de constelação/passivas nem multi-hits — pra golpes com vários acertos,
+      o número é referente a UM acerto só.
+    </div>
+  </section>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/auth-client.js"></script>
+<script src="js/calc.js"></script>
+</body>
+</html>
