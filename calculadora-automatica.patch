@@ -1,0 +1,239 @@
+diff --git a/lib/enka.js b/lib/enka.js
+index 9502deb..d7c9e95 100644
+--- a/lib/enka.js
++++ b/lib/enka.js
+@@ -246,7 +246,17 @@ const FINAL_STAT_IDS = {
+   hp: '2000', atk: '2001', def: '2002',
+   critRate: '20', critDmg: '22', energyRecharge: '23', elementMastery: '28',
+ };
+-function extractFinalStats(av) {
++// Bônus de dano (%) por elemento — ID interno do jogo pra cada "% DMG Bonus"
++// (cálice principal, algumas flores/plumas de conjunto de 4pç, sub-stats de
++// alguns conjuntos, etc). É a mesma soma que a Enka já usa nos filtros do
++// próprio site. Isso é o que a calculadora de referência (gidmgcalculator)
++// lê automaticamente do seu build em vez de pedir pra você digitar.
++const DMG_BONUS_IDS = {
++  Physical: '30',
++  Pyro: '40', Electro: '41', Hydro: '42', Dendro: '43',
++  Anemo: '44', Geo: '45', Cryo: '46',
++};
++function extractFinalStats(av, element) {
+   const m = av.fightPropMap || {};
+   const num = id => Number(m[id] || 0);
+   const hp = Math.round(num(FINAL_STAT_IDS.hp));
+@@ -259,12 +269,19 @@ function extractFinalStats(av) {
+   // "Valor de Crítico" (CV): a mesma conta que ferramentas tipo Akasha usam
+   // pra resumir crit rate + crit dmg num único número (2x rate + dmg).
+   const cv = critRate * 2 + critDmg;
++  // Bônus de dano do elemento do próprio personagem (ex: cálice Pyro% num
++  // personagem Pyro) e bônus de dano físico — lidos direto do build, sem
++  // precisar digitar nada na calculadora.
++  const dmgBonusElemental = element && DMG_BONUS_IDS[element] ? num(DMG_BONUS_IDS[element]) * 100 : 0;
++  const dmgBonusPhysical = num(DMG_BONUS_IDS.Physical) * 100;
+   return {
+     hp, atk, def, em,
+     critRate: Number(critRate.toFixed(1)),
+     critDmg: Number(critDmg.toFixed(1)),
+     energyRecharge: Number(er.toFixed(1)),
+     critValue: Number(cv.toFixed(1)),
++    dmgBonusElemental: Number(dmgBonusElemental.toFixed(1)),
++    dmgBonusPhysical: Number(dmgBonusPhysical.toFixed(1)),
+   };
+ }
+ 
+@@ -300,7 +317,7 @@ async function fetchProfile(uid) {
+       weapon: getWeaponFromEquip(av.equipList, weaponMap),
+       artifacts,
+       artifactSets: summarizeArtifactSets(artifacts),
+-      stats: extractFinalStats(av),
++      stats: extractFinalStats(av, meta ? meta.element : ''),
+       temDetalhes: true,
+     });
+   }
+diff --git a/public/calculadora.html b/public/calculadora.html
+index d1a4e11..9b6ebd5 100644
+--- a/public/calculadora.html
++++ b/public/calculadora.html
+@@ -51,7 +51,7 @@
+ 
+   <section id="calcBox" class="panel hidden">
+     <h2 class="font-display" style="font-size:18px; color:var(--gold-bright); margin-bottom:6px;">Monte seu time</h2>
+-    <p class="hint" style="margin-bottom:14px;">Escolha até 4 personagens salvos no seu Perfil. Pra cada um, monte a rotação (um ou mais golpes em sequência) escolhendo talento, nível e, se for o caso, a reação elemental que aquele golpe dispara — a Proficiência Elemental (EM) salva do personagem entra automaticamente na conta.</p>
++    <p class="hint" style="margin-bottom:14px;">Escolha até 4 personagens salvos no seu Perfil. Pra cada um, monte a rotação (um ou mais golpes em sequência) escolhendo talento e nível — o app já detecta sozinho o status de escala (ATQ/HP/DEF), se o golpe é dano Físico ou Elemental, e aplica automaticamente o bônus de dano do seu cálice/sub-stats e a Proficiência Elemental (EM) salvos do personagem. Só escolha manualmente a reação elemental que o golpe dispara (isso depende da sua rotação, então não dá pra adivinhar sozinho).</p>
+ 
+     <div class="global-panel">
+       <div class="field">
+@@ -80,14 +80,20 @@
+     </div>
+ 
+     <div class="warn-box">
+-      Estimativa aproximada: usa o multiplicador oficial de cada talento (dados públicos da
+-      <a href="https://gi.yatta.moe" target="_blank" style="color:var(--gold-bright);">Project Amber</a>)
+-      e as fórmulas oficiais de reação elemental (Amplificação, Transformativa e Aditiva), aplicadas sobre
+-      o status já salvo no seu Perfil — incluindo a Proficiência Elemental (EM) na hora de calcular o bônus
+-      de cada reação. Use o campo "Nº de acertos" quando a habilidade golpeia mais de uma vez (ex: normais
+-      multi-hit) pra chegar mais perto do valor de sites como o Akasha. <b>Não entram automaticamente</b>:
+-      efeitos de sets de artefato (2pç/4pç), passivas de arma e talentos passivos — se algum desses dá bônus
+-      de dano, adicione o valor manualmente em "Bônus dano extra" ou "Bônus de reação". O multiplicador de
++      Estimativa aproximada, no mesmo espírito de calculadoras como a
++      <a href="https://gidmgcalculator.web.app" target="_blank" style="color:var(--gold-bright);">gidmgcalculator</a>:
++      usa o multiplicador oficial de cada talento (dados públicos da
++      <a href="https://gi.yatta.moe" target="_blank" style="color:var(--gold-bright);">Project Amber</a>),
++      as fórmulas oficiais de reação elemental (Amplificação, Transformativa e Aditiva) e o status já salvo
++      no seu Perfil. <b>Já entram automaticamente</b>: o status de escala certo pra cada talento (ATQ/HP/DEF —
++      inclusive pra fujões do padrão como Noelle, Albedo, Xingqiu, Yelan, Kokomi e Nilou), se o golpe é dano
++      Físico ou Elemental, o bônus de dano correspondente do seu cálice/sub-stats, e a Proficiência Elemental
++      (EM) na hora de calcular cada reação. Use o campo "Nº de acertos" quando a habilidade golpeia mais de
++      uma vez (ex: normais multi-hit). <b>Ainda não entram automaticamente</b> (adicione manualmente em "Bônus
++      dano extra" ou "Bônus de reação" quando se aplicar): efeitos de sets de artefato (2pç/4pç), passivas de
++      arma e talentos passivos, e buffs de outros personagens do time — esses variam demais rotação a rotação
++      pra dar pra automatizar com segurança. Se algum golpe tiver infusão elemental (ex: Chongyun, espada
++      livre de Xiangling), troque manualmente o seletor "Físico/Elemental" desse golpe. O multiplicador de
+       nível usado pelas reações Transformativa/Aditiva é preciso pra personagens Lv.80 e Lv.90 (dados
+       confirmados) — pra outros níveis é uma extrapolação aproximada.
+     </div>
+diff --git a/public/js/calc.js b/public/js/calc.js
+index 6df6257..ad9ffa8 100644
+--- a/public/js/calc.js
++++ b/public/js/calc.js
+@@ -61,6 +61,44 @@ const ADDITIVE = {
+ // EM bônus aditivo: 5×EM / (1200+EM)
+ function emBonusAdditive(em){ return (5 * em) / (1200 + em); }
+ 
++/* ---------------- Automação: stat de escala e tipo de dano por golpe ----------------
++   Baseado no mesmo princípio do gidmgcalculator (gidmgcalculator.web.app): cada
++   golpe já "sabe" de que status ele escala e se é dano elemental (do próprio
++   elemento do personagem) ou físico, então o app auto-seleciona isso — o
++   usuário só troca manualmente em casos raros (ex: infusão de elemento). */
++
++// Personagens cujo Habilidade Elemental e/ou Explosão fogem do padrão ATQ.
++// key: nome exatamente como salvo no Perfil (vem da Enka). value: { 1: stat da
++// Habilidade, 2: stat da Explosão } — quando ausente, cai no padrão 'atk'.
++const OFF_ATK_SCALING = {
++  'Noelle':  { 1: 'def', 2: 'def' },
++  'Albedo':  { 1: 'def' },
++  'Xingqiu': { 1: 'hp', 2: 'hp' },
++  'Yelan':   { 1: 'hp', 2: 'hp' },
++  'Kokomi':  { 0: 'hp', 1: 'hp', 2: 'hp' },
++  'Nilou':   { 1: 'hp', 2: 'hp' },
++};
++function autoStatFor(characterName, talent){
++  if (!talent) return 'atk';
++  const override = OFF_ATK_SCALING[characterName];
++  if (override && override[talent.type]) return override[talent.type];
++  return 'atk';
++}
++
++// Ataque Normal/Carregado/Investida (type 0) geralmente é dano Físico, a menos
++// que o personagem tenha infusão elemental permanente — nesses casos o pessoal
++// já consegue trocar manualmente pra "Elemental" no seletor. Habilidade (1) e
++// Explosão (2) são sempre do elemento do próprio personagem.
++function autoDamageTypeFor(talent){
++  return talent && talent.type === 0 ? 'physical' : 'elemental';
++}
++// Bônus de dano (%) já vindo do build (cálice, sub-stats etc.), lido
++// automaticamente da Enka — sem precisar digitar nada.
++function autoDmgBonusPercent(stats, damageType){
++  if (!stats) return 0;
++  return damageType === 'physical' ? (stats.dmgBonusPhysical || 0) : (stats.dmgBonusElemental || 0);
++}
++
+ function reactionOptionsHtml(selected){
+   const groups = [
+     ['', { 'nenhuma': 'Nenhuma' }],
+@@ -133,7 +171,9 @@ function calcHitDamage(hit, row, globals){
+   const charLevel = row.characterLevel;
+   const multiplier = Number(level.params[0]) || 0; // primeiro parâmetro = % de dano na maioria dos talentos
+   const statValue = stats[hit.statChoice] || 0;
+-  const extraBonus = 1 + (Number(hit.extraDmgPercent) || 0) / 100;
++  const damageType = hit.damageType || autoDamageTypeFor(hit.talent);
++  const autoBonusPercent = autoDmgBonusPercent(stats, damageType);
++  const extraBonus = 1 + (autoBonusPercent + (Number(hit.extraDmgPercent) || 0)) / 100;
+   const reactionBonusFrac = (Number(hit.reactionBonusPercent) || 0) / 100;
+ 
+   let baseBeforeMultipliers = statValue * multiplier;
+@@ -201,13 +241,14 @@ function availableCharsFor(slotIdx){
+   return MY_CHARS.filter(r => !usedElsewhere.has(r.character_name));
+ }
+ 
+-function defaultHit(talents){
++function defaultHit(talents, characterName){
+   const talent = talents && talents.length ? talents[0] : null;
+   return {
+     talentIdx: talent ? 0 : null,
+     talent,
+     levelIdx: talent ? Math.min(8, talent.levels.length - 1) : null,
+-    statChoice: 'atk',
++    statChoice: autoStatFor(characterName, talent),
++    damageType: autoDamageTypeFor(talent),
+     extraDmgPercent: 0,
+     reaction: 'nenhuma',
+     reactionBonusPercent: 0,
+@@ -230,10 +271,16 @@ function renderHitHtml(slotIdx, hitIdx, hit, talents, row, globals){
+         <select class="level-select" data-slot="${slotIdx}" data-hit="${hitIdx}">
+           ${hit.talent ? hit.talent.levels.map((lv,i)=> `<option value="${i}" ${hit.levelIdx===i?'selected':''}>Lv. ${lv.level}</option>`).join('') : ''}
+         </select>
+-        <select class="stat-select" data-slot="${slotIdx}" data-hit="${hitIdx}">
+-          <option value="atk" ${hit.statChoice==='atk'?'selected':''}>ATQ</option>
+-          <option value="hp" ${hit.statChoice==='hp'?'selected':''}>HP</option>
+-          <option value="def" ${hit.statChoice==='def'?'selected':''}>DEF</option>
++        <select class="stat-select" data-slot="${slotIdx}" data-hit="${hitIdx}" title="Detectado automaticamente pelo talento — troque só se souber que está errado">
++          <option value="atk" ${hit.statChoice==='atk'?'selected':''}>ATQ (auto)</option>
++          <option value="hp" ${hit.statChoice==='hp'?'selected':''}>HP (auto)</option>
++          <option value="def" ${hit.statChoice==='def'?'selected':''}>DEF (auto)</option>
++        </select>
++      </div>
++      <div class="mini-row" style="margin-top:6px;">
++        <select class="dmgtype-select" data-slot="${slotIdx}" data-hit="${hitIdx}" title="Detectado automaticamente pelo tipo de talento (Normal = Físico, Habilidade/Explosão = elemento do personagem) — troque em caso de infusão elemental">
++          <option value="physical" ${(hit.damageType||autoDamageTypeFor(hit.talent))==='physical'?'selected':''}>Dano Físico (auto)</option>
++          <option value="elemental" ${(hit.damageType||autoDamageTypeFor(hit.talent))==='elemental'?'selected':''}>Dano Elemental (auto)</option>
+         </select>
+       </div>
+       <div style="margin-top:6px;">
+@@ -241,6 +288,9 @@ function renderHitHtml(slotIdx, hitIdx, hit, talents, row, globals){
+           ${reactionOptionsHtml(hit.reaction)}
+         </select>
+       </div>
++      <p class="hint" style="margin-top:6px; font-size:10px;">
++        Bônus de dano já aplicado automaticamente do seu build (cálice/sub-stats): <b>${autoDmgBonusPercent(row.stats, hit.damageType||autoDamageTypeFor(hit.talent)).toFixed(1)}%</b>
++      </p>
+       <div class="mini-row" style="margin-top:6px;">
+         <div>
+           <label style="font-size:9.5px;">Bônus dano extra (%)</label>
+@@ -347,7 +397,7 @@ async function onPickCharacter(slotIdx, characterName){
+     if (!slot || slot.row.character_name !== characterName) return; // usuário trocou antes de terminar
+     slot.talents = talents;
+     slot.loadingTalents = false;
+-    if (talents.length) slot.hits = [defaultHit(talents)];
++    if (talents.length) slot.hits = [defaultHit(talents, slot.row.character_name)];
+   } catch(e){
+     const slot = TEAM[slotIdx];
+     if (slot) { slot.loadingTalents = false; slot.talentError = e.message; }
+@@ -390,7 +440,7 @@ document.addEventListener('DOMContentLoaded', async () => {
+       const slotIdx = Number(t.dataset.slot);
+       const slot = TEAM[slotIdx];
+       if (slot && slot.hits.length < MAX_HITS_PER_SLOT){
+-        slot.hits.push(defaultHit(slot.talents));
++        slot.hits.push(defaultHit(slot.talents, slot.row.character_name));
+         renderAllSlots();
+       }
+     } else if (t.classList.contains('remove-hit')){
+@@ -418,6 +468,8 @@ document.addEventListener('DOMContentLoaded', async () => {
+       hit.talentIdx = Number(t.value);
+       hit.talent = slot.talents[hit.talentIdx];
+       hit.levelIdx = Math.min(8, hit.talent.levels.length - 1);
++      hit.statChoice = autoStatFor(slot.row.character_name, hit.talent);
++      hit.damageType = autoDamageTypeFor(hit.talent);
+       renderAllSlots();
+     } else if (t.classList.contains('level-select') && hit){
+       hit.levelIdx = Number(t.value);
+@@ -425,6 +477,9 @@ document.addEventListener('DOMContentLoaded', async () => {
+     } else if (t.classList.contains('stat-select') && hit){
+       hit.statChoice = t.value;
+       renderAllSlots();
++    } else if (t.classList.contains('dmgtype-select') && hit){
++      hit.damageType = t.value;
++      renderAllSlots();
+     } else if (t.classList.contains('reaction-select') && hit){
+       hit.reaction = t.value;
+       renderAllSlots();
