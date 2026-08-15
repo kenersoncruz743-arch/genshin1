@@ -21,11 +21,17 @@ const TALENTS_CACHE = {}; // characterName -> talents[]
 /* ---------------- Constantes de reação (dados públicos do jogo) ---------------- */
 
 // Reações de Amplificação: multiplicam o dano do golpe que causou a reação.
+// IMPORTANTE: o elemento que importa é o de quem DISPARA a reação (o golpe
+// que você está calculando), não o que já estava no inimigo.
+// Vaporizar: Hydro disparando sobre um inimigo já com Pyro = ×2 (forte).
+//            Pyro disparando sobre um inimigo já com Hydro = ×1.5 (fraco).
+// Derreter:  Pyro disparando sobre um inimigo já com Cryo = ×2 (forte).
+//            Cryo disparando sobre um inimigo já com Pyro = ×1.5 (fraco).
 const AMPLIFYING = {
-  vaporizar_forte: { label: 'Vaporizar (Pyro sobre Hydro) ×2', mult: 2 },
-  vaporizar_fraco: { label: 'Vaporizar (Hydro sobre Pyro) ×1.5', mult: 1.5 },
-  derreter_forte:  { label: 'Derreter (Cryo sobre Pyro) ×2', mult: 2 },
-  derreter_fraco:  { label: 'Derreter (Pyro sobre Cryo) ×1.5', mult: 1.5 },
+  vaporizar_forte: { label: 'Vaporizar forte — seu golpe é Hydro, inimigo com Pyro ×2', mult: 2 },
+  vaporizar_fraco: { label: 'Vaporizar fraco — seu golpe é Pyro, inimigo com Hydro ×1.5', mult: 1.5 },
+  derreter_forte:  { label: 'Derreter forte — seu golpe é Pyro, inimigo com Cryo ×2', mult: 2 },
+  derreter_fraco:  { label: 'Derreter fraco — seu golpe é Cryo, inimigo com Pyro ×1.5', mult: 1.5 },
 };
 // EM bônus pra amplificação: 2.78×EM / (1400+EM)
 function emBonusAmplifying(em){ return (2.78 * em) / (1400 + em); }
@@ -120,6 +126,7 @@ function calcHitDamage(hit, row, globals){
   if (!hit || !hit.talent || hit.levelIdx === null || hit.levelIdx === undefined) return { hit: 0, reaction: 0, total: 0 };
   const level = hit.talent.levels[hit.levelIdx];
   if (!level || !level.params || !level.params.length) return { hit: 0, reaction: 0, total: 0 };
+  const repeats = Math.max(1, Number(hit.hitCount) || 1);
 
   const stats = row.stats || {};
   const em = Number(stats.em) || 0;
@@ -159,7 +166,7 @@ function calcHitDamage(hit, row, globals){
     reactionDmg = coef * reactionLevelMultiplier(charLevel) * (1 + emBonusTransformative(em) + reactionBonusFrac) * res;
   }
 
-  return { hit: hitDmg, reaction: reactionDmg, total: hitDmg + reactionDmg };
+  return { hit: hitDmg * repeats, reaction: reactionDmg * repeats, total: (hitDmg + reactionDmg) * repeats };
 }
 
 function calcSlotTotal(slot, globals){
@@ -204,6 +211,7 @@ function defaultHit(talents){
     extraDmgPercent: 0,
     reaction: 'nenhuma',
     reactionBonusPercent: 0,
+    hitCount: 1,
   };
 }
 
@@ -243,9 +251,13 @@ function renderHitHtml(slotIdx, hitIdx, hit, talents, row, globals){
           <input type="number" class="reaction-bonus" data-slot="${slotIdx}" data-hit="${hitIdx}" value="${hit.reactionBonusPercent||0}" step="1">
         </div>
       </div>
+      <div class="talent-row" style="margin-top:6px;">
+        <label style="font-size:9.5px;">Nº de acertos desse golpe (ex: 3 se a habilidade acerta 3 vezes)</label>
+        <input type="number" class="hit-count" data-slot="${slotIdx}" data-hit="${hitIdx}" value="${hit.hitCount||1}" min="1" step="1">
+      </div>
       <div class="dmg-result">
         <div class="num">${Math.round(r.total).toLocaleString('pt-BR')}</div>
-        <div class="lbl">${r.reaction > 0 ? `golpe ${Math.round(r.hit).toLocaleString('pt-BR')} + reação ${Math.round(r.reaction).toLocaleString('pt-BR')}` : 'dano estimado'}</div>
+        <div class="lbl">${r.reaction > 0 ? `golpe ${Math.round(r.hit).toLocaleString('pt-BR')} + reação ${Math.round(r.reaction).toLocaleString('pt-BR')}` : 'dano estimado'}${hit.hitCount>1?` (×${hit.hitCount} acertos)`:''}</div>
       </div>
     </div>
   `;
@@ -421,6 +433,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderAllSlots();
     } else if (t.classList.contains('reaction-bonus') && hit){
       hit.reactionBonusPercent = Number(t.value) || 0;
+      renderAllSlots();
+    } else if (t.classList.contains('hit-count') && hit){
+      hit.hitCount = Math.max(1, Number(t.value) || 1);
       renderAllSlots();
     }
   });
