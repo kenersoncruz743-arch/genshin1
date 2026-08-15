@@ -61,6 +61,44 @@ const ADDITIVE = {
 // EM bônus aditivo: 5×EM / (1200+EM)
 function emBonusAdditive(em){ return (5 * em) / (1200 + em); }
 
+/* ---------------- Automação: stat de escala e tipo de dano por golpe ----------------
+   Baseado no mesmo princípio do gidmgcalculator (gidmgcalculator.web.app): cada
+   golpe já "sabe" de que status ele escala e se é dano elemental (do próprio
+   elemento do personagem) ou físico, então o app auto-seleciona isso — o
+   usuário só troca manualmente em casos raros (ex: infusão de elemento). */
+
+// Personagens cujo Habilidade Elemental e/ou Explosão fogem do padrão ATQ.
+// key: nome exatamente como salvo no Perfil (vem da Enka). value: { 1: stat da
+// Habilidade, 2: stat da Explosão } — quando ausente, cai no padrão 'atk'.
+const OFF_ATK_SCALING = {
+  'Noelle':  { 1: 'def', 2: 'def' },
+  'Albedo':  { 1: 'def' },
+  'Xingqiu': { 1: 'hp', 2: 'hp' },
+  'Yelan':   { 1: 'hp', 2: 'hp' },
+  'Kokomi':  { 0: 'hp', 1: 'hp', 2: 'hp' },
+  'Nilou':   { 1: 'hp', 2: 'hp' },
+};
+function autoStatFor(characterName, talent){
+  if (!talent) return 'atk';
+  const override = OFF_ATK_SCALING[characterName];
+  if (override && override[talent.type]) return override[talent.type];
+  return 'atk';
+}
+
+// Ataque Normal/Carregado/Investida (type 0) geralmente é dano Físico, a menos
+// que o personagem tenha infusão elemental permanente — nesses casos o pessoal
+// já consegue trocar manualmente pra "Elemental" no seletor. Habilidade (1) e
+// Explosão (2) são sempre do elemento do próprio personagem.
+function autoDamageTypeFor(talent){
+  return talent && talent.type === 0 ? 'physical' : 'elemental';
+}
+// Bônus de dano (%) já vindo do build (cálice, sub-stats etc.), lido
+// automaticamente da Enka — sem precisar digitar nada.
+function autoDmgBonusPercent(stats, damageType){
+  if (!stats) return 0;
+  return damageType === 'physical' ? (stats.dmgBonusPhysical || 0) : (stats.dmgBonusElemental || 0);
+}
+
 function reactionOptionsHtml(selected){
   const groups = [
     ['', { 'nenhuma': 'Nenhuma' }],
@@ -133,7 +171,9 @@ function calcHitDamage(hit, row, globals){
   const charLevel = row.characterLevel;
   const multiplier = Number(level.params[0]) || 0; // primeiro parâmetro = % de dano na maioria dos talentos
   const statValue = stats[hit.statChoice] || 0;
-  const extraBonus = 1 + (Number(hit.extraDmgPercent) || 0) / 100;
+  const damageType = hit.damageType || autoDamageTypeFor(hit.talent);
+  const autoBonusPercent = autoDmgBonusPercent(stats, damageType);
+  const extraBonus = 1 + (autoBonusPercent + (Number(hit.extraDmgPercent) || 0)) / 100;
   const reactionBonusFrac = (Number(hit.reactionBonusPercent) || 0) / 100;
 
   let baseBeforeMultipliers = statValue * multiplier;
@@ -201,13 +241,14 @@ function availableCharsFor(slotIdx){
   return MY_CHARS.filter(r => !usedElsewhere.has(r.character_name));
 }
 
-function defaultHit(talents){
+function defaultHit(talents, characterName){
   const talent = talents && talents.length ? talents[0] : null;
   return {
     talentIdx: talent ? 0 : null,
     talent,
     levelIdx: talent ? Math.min(8, talent.levels.length - 1) : null,
-    statChoice: 'atk',
+    statChoice: autoStatFor(characterName, talent),
+    damageType: autoDamageTypeFor(talent),
     extraDmgPercent: 0,
     reaction: 'nenhuma',
     reactionBonusPercent: 0,
@@ -230,10 +271,16 @@ function renderHitHtml(slotIdx, hitIdx, hit, talents, row, globals){
         <select class="level-select" data-slot="${slotIdx}" data-hit="${hitIdx}">
           ${hit.talent ? hit.talent.levels.map((lv,i)=> `<option value="${i}" ${hit.levelIdx===i?'selected':''}>Lv. ${lv.level}</option>`).join('') : ''}
         </select>
-        <select class="stat-select" data-slot="${slotIdx}" data-hit="${hitIdx}">
-          <option value="atk" ${hit.statChoice==='atk'?'selected':''}>ATQ</option>
-          <option value="hp" ${hit.statChoice==='hp'?'selected':''}>HP</option>
-          <option value="def" ${hit.statChoice==='def'?'selected':''}>DEF</option>
+        <select class="stat-select" data-slot="${slotIdx}" data-hit="${hitIdx}" title="Detectado automaticamente pelo talento — troque só se souber que está errado">
+          <option value="atk" ${hit.statChoice==='atk'?'selected':''}>ATQ (auto)</option>
+          <option value="hp" ${hit.statChoice==='hp'?'selected':''}>HP (auto)</option>
+          <option value="def" ${hit.statChoice==='def'?'selected':''}>DEF (auto)</option>
+        </select>
+      </div>
+      <div class="mini-row" style="margin-top:6px;">
+        <select class="dmgtype-select" data-slot="${slotIdx}" data-hit="${hitIdx}" title="Detectado automaticamente pelo tipo de talento (Normal = Físico, Habilidade/Explosão = elemento do personagem) — troque em caso de infusão elemental">
+          <option value="physical" ${(hit.damageType||autoDamageTypeFor(hit.talent))==='physical'?'selected':''}>Dano Físico (auto)</option>
+          <option value="elemental" ${(hit.damageType||autoDamageTypeFor(hit.talent))==='elemental'?'selected':''}>Dano Elemental (auto)</option>
         </select>
       </div>
       <div style="margin-top:6px;">
@@ -241,6 +288,9 @@ function renderHitHtml(slotIdx, hitIdx, hit, talents, row, globals){
           ${reactionOptionsHtml(hit.reaction)}
         </select>
       </div>
+      <p class="hint" style="margin-top:6px; font-size:10px;">
+        Bônus de dano já aplicado automaticamente do seu build (cálice/sub-stats): <b>${autoDmgBonusPercent(row.stats, hit.damageType||autoDamageTypeFor(hit.talent)).toFixed(1)}%</b>
+      </p>
       <div class="mini-row" style="margin-top:6px;">
         <div>
           <label style="font-size:9.5px;">Bônus dano extra (%)</label>
@@ -347,7 +397,7 @@ async function onPickCharacter(slotIdx, characterName){
     if (!slot || slot.row.character_name !== characterName) return; // usuário trocou antes de terminar
     slot.talents = talents;
     slot.loadingTalents = false;
-    if (talents.length) slot.hits = [defaultHit(talents)];
+    if (talents.length) slot.hits = [defaultHit(talents, slot.row.character_name)];
   } catch(e){
     const slot = TEAM[slotIdx];
     if (slot) { slot.loadingTalents = false; slot.talentError = e.message; }
@@ -390,7 +440,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const slotIdx = Number(t.dataset.slot);
       const slot = TEAM[slotIdx];
       if (slot && slot.hits.length < MAX_HITS_PER_SLOT){
-        slot.hits.push(defaultHit(slot.talents));
+        slot.hits.push(defaultHit(slot.talents, slot.row.character_name));
         renderAllSlots();
       }
     } else if (t.classList.contains('remove-hit')){
@@ -418,12 +468,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       hit.talentIdx = Number(t.value);
       hit.talent = slot.talents[hit.talentIdx];
       hit.levelIdx = Math.min(8, hit.talent.levels.length - 1);
+      hit.statChoice = autoStatFor(slot.row.character_name, hit.talent);
+      hit.damageType = autoDamageTypeFor(hit.talent);
       renderAllSlots();
     } else if (t.classList.contains('level-select') && hit){
       hit.levelIdx = Number(t.value);
       renderAllSlots();
     } else if (t.classList.contains('stat-select') && hit){
       hit.statChoice = t.value;
+      renderAllSlots();
+    } else if (t.classList.contains('dmgtype-select') && hit){
+      hit.damageType = t.value;
       renderAllSlots();
     } else if (t.classList.contains('reaction-select') && hit){
       hit.reaction = t.value;
