@@ -51,7 +51,7 @@
 
   <section id="calcBox" class="panel hidden">
     <h2 class="font-display" style="font-size:18px; color:var(--gold-bright); margin-bottom:6px;">Monte seu time</h2>
-    <p class="hint" style="margin-bottom:14px;">Escolha até 4 personagens salvos no seu Perfil (com arma, artefatos e status já importados do UID). Pra cada um, selecione um talento e o nível pra estimar o dano de um golpe.</p>
+    <p class="hint" style="margin-bottom:14px;">Escolha até 4 personagens salvos no seu Perfil. Pra cada um, monte a rotação (um ou mais golpes em sequência) escolhendo talento, nível e, se for o caso, a reação elemental que aquele golpe dispara — a Proficiência Elemental (EM) salva do personagem entra automaticamente na conta.</p>
 
     <div class="global-panel">
       <div class="field">
@@ -75,16 +75,18 @@
     <div class="team-grid" id="teamGrid"></div>
 
     <div class="team-total">
-      <div class="lbl hint">Dano total estimado do time (1 uso de cada talento selecionado)</div>
+      <div class="lbl hint">Dano total estimado da rotação do time</div>
       <div class="num" id="teamTotal">0</div>
     </div>
 
     <div class="warn-box">
       Estimativa aproximada: usa o multiplicador oficial de cada talento (dados públicos da
-      <a href="https://gi.yatta.moe" target="_blank" style="color:var(--gold-bright);">Project Amber</a>),
-      aplicado sobre o status já salvo no seu Perfil. Não inclui reações elementais (Vaporizar,
-      Amplificar, etc.), buffs de constelação/passivas nem multi-hits — pra golpes com vários acertos,
-      o número é referente a UM acerto só.
+      <a href="https://gi.yatta.moe" target="_blank" style="color:var(--gold-bright);">Project Amber</a>)
+      e as fórmulas oficiais de reação elemental (Amplificação, Transformativa e Aditiva), aplicadas sobre
+      o status já salvo no seu Perfil — incluindo a Proficiência Elemental (EM) na hora de calcular o bônus
+      de cada reação. Não inclui buffs de constelação/passivas nem multi-hits dentro de um mesmo golpe.
+      O multiplicador de nível usado pelas reações Transformativa/Aditiva é preciso pra personagens Lv.80 e
+      Lv.90 (dados confirmados) — pra outros níveis é uma extrapolação aproximada.
     </div>
   </section>
 </div>
