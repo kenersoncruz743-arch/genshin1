@@ -1,15 +1,173 @@
 /*
   Calculadora de dano — monta um time de até 4 personagens salvos no Perfil
-  (com status finais, arma e artefatos já importados do UID) e estima o dano
-  de um golpe usando o multiplicador oficial do talento escolhido, buscado na
-  Project Amber (gi.yatta.moe) via /api/damage.
+  (com status finais, arma e artefatos já importados do UID). Cada personagem
+  pode ter vários "golpes" em sequência (a rotação), e cada golpe pode
+  disparar uma reação elemental — usando a Proficiência Elemental (EM) salva
+  do personagem nas fórmulas oficiais do jogo.
+
+  Fontes:
+  - Multiplicador do talento: Project Amber (gi.yatta.moe), via /api/damage.
+  - Fórmulas de reação e coeficientes-base: documentação pública do jogo
+    (mesmas usadas por calculadoras como a do Genshin Optimizer/KQM).
 */
 
 const TEAM_SIZE = 4;
+const MAX_HITS_PER_SLOT = 6;
 let MY_CHARS = [];
 let CHAR_CATALOG = [];
 let TEAM = new Array(TEAM_SIZE).fill(null);
 const TALENTS_CACHE = {}; // characterName -> talents[]
+
+/* ---------------- Constantes de reação (dados públicos do jogo) ---------------- */
+
+// Reações de Amplificação: multiplicam o dano do golpe que causou a reação.
+const AMPLIFYING = {
+  vaporizar_forte: { label: 'Vaporizar (Pyro sobre Hydro) ×2', mult: 2 },
+  vaporizar_fraco: { label: 'Vaporizar (Hydro sobre Pyro) ×1.5', mult: 1.5 },
+  derreter_forte:  { label: 'Derreter (Cryo sobre Pyro) ×2', mult: 2 },
+  derreter_fraco:  { label: 'Derreter (Pyro sobre Cryo) ×1.5', mult: 1.5 },
+};
+// EM bônus pra amplificação: 2.78×EM / (1400+EM)
+function emBonusAmplifying(em){ return (2.78 * em) / (1400 + em); }
+
+// Reações Transformativas: geram um dano à parte (não multiplicam o golpe).
+// Não critam, ignoram DEF do alvo, só sofrem RES. Coeficiente-base oficial
+// (valores atuais pós-buff de reações de v5.2):
+const TRANSFORMATIVE = {
+  sobrecarga:        { label: 'Sobrecarga (Pyro+Electro) — coef. 2.75', coef: 2.75 },
+  eletrocarregado:   { label: 'Eletrocarregado (Hydro+Electro) — coef. 2.0', coef: 2.0 },
+  supercondutor:     { label: 'Supercondutor (Cryo+Electro) — coef. 1.5', coef: 1.5 },
+  redemoinho:        { label: 'Redemoinho/Swirl (Anemo) — coef. 0.6', coef: 0.6 },
+  queimando:         { label: 'Queimando (Dendro+Pyro) — coef. 0.25', coef: 0.25 },
+  florescer:         { label: 'Florescer (Dendro+Hydro) — coef. 2.0', coef: 2.0 },
+  hiperflorescimento:{ label: 'Hiperflorescimento (Núcleo+Electro) — coef. 3.0', coef: 3.0 },
+  abrolhamento:      { label: 'Abrolhamento (Núcleo+Pyro) — coef. 3.0', coef: 3.0 },
+};
+// EM bônus transformativo: 16×EM / (2000+EM)
+function emBonusTransformative(em){ return (16 * em) / (2000 + em); }
+
+// Reações Aditivas: somam um bônus fixo ao dano do golpe (antes de DEF/RES),
+// e esse bônus pode critar junto com o golpe.
+const ADDITIVE = {
+  agravar:  { label: 'Agravar/Aggravate (Electro sobre Quicken) — coef. 1.15', coef: 1.15 },
+  propagar: { label: 'Propagar/Spread (Dendro sobre Quicken) — coef. 1.25', coef: 1.25 },
+};
+// EM bônus aditivo: 5×EM / (1200+EM)
+function emBonusAdditive(em){ return (5 * em) / (1200 + em); }
+
+function reactionOptionsHtml(selected){
+  const groups = [
+    ['', { 'nenhuma': 'Nenhuma' }],
+    ['Amplificação', Object.fromEntries(Object.entries(AMPLIFYING).map(([k,v])=>[k,v.label]))],
+    ['Transformativa', Object.fromEntries(Object.entries(TRANSFORMATIVE).map(([k,v])=>[k,v.label]))],
+    ['Aditiva', Object.fromEntries(Object.entries(ADDITIVE).map(([k,v])=>[k,v.label]))],
+  ];
+  let html = '';
+  groups.forEach(([label, opts]) => {
+    const inner = Object.entries(opts).map(([k,l]) =>
+      `<option value="${k}" ${selected===k?'selected':''}>${l}</option>`).join('');
+    html += label ? `<optgroup label="${label}">${inner}</optgroup>` : inner;
+  });
+  return html;
+}
+
+function reactionKind(key){
+  if (AMPLIFYING[key]) return 'amplifying';
+  if (TRANSFORMATIVE[key]) return 'transformative';
+  if (ADDITIVE[key]) return 'additive';
+  return null;
+}
+
+/* ---------------- Fórmulas gerais de dano ---------------- */
+
+// Multiplicador de nível de reação — usado só pelas reações Transformativas
+// e Aditivas. Só temos 2 âncoras confirmadas com precisão (nível 80 e 90,
+// que cobrem a esmagadora maioria dos personagens já endgame); pra outros
+// níveis, extrapolamos linearmente a partir dessas duas âncoras — é uma
+// aproximação, avisada na página.
+const REACTION_LEVEL_MULT_ANCHORS = { 80: 1077.44, 90: 1446.85 };
+function reactionLevelMultiplier(level){
+  const lv = Number(level) || 90;
+  const rate = (REACTION_LEVEL_MULT_ANCHORS[90] - REACTION_LEVEL_MULT_ANCHORS[80]) / 10;
+  return Math.max(0, REACTION_LEVEL_MULT_ANCHORS[80] + (lv - 80) * rate);
+}
+
+function defMultiplier(charLevel, enemyLevel){
+  const cl = Number(charLevel) || 90;
+  const el = Number(enemyLevel) || 100;
+  return (cl + 100) / (cl + 100 + el + 100);
+}
+function resMultiplier(resPercent){
+  const res = (Number(resPercent) || 0) / 100;
+  if (res < 0) return 1 - res / 2;
+  if (res < 0.5) return 1 - res;
+  return 1 / (1 + 4 * res);
+}
+function critMultiplier(stats, mode){
+  if (!stats) return 1;
+  const rate = Math.min(1, (stats.critRate || 0) / 100);
+  const dmg = (stats.critDmg || 0) / 100;
+  if (mode === 'always') return 1 + dmg;
+  if (mode === 'never') return 1;
+  return 1 + rate * dmg; // média
+}
+
+// Calcula o dano de UM golpe (com reação, se houver). Retorna
+// { hit, reaction, total } — "hit" é o dano do próprio golpe (já
+// multiplicado por Vaporizar/Derreter quando é o caso), "reaction" é o dano
+// à parte de uma reação Transformativa (0 se não houver), "total" é a soma.
+function calcHitDamage(hit, row, globals){
+  if (!hit || !hit.talent || hit.levelIdx === null || hit.levelIdx === undefined) return { hit: 0, reaction: 0, total: 0 };
+  const level = hit.talent.levels[hit.levelIdx];
+  if (!level || !level.params || !level.params.length) return { hit: 0, reaction: 0, total: 0 };
+
+  const stats = row.stats || {};
+  const em = Number(stats.em) || 0;
+  const charLevel = row.characterLevel;
+  const multiplier = Number(level.params[0]) || 0; // primeiro parâmetro = % de dano na maioria dos talentos
+  const statValue = stats[hit.statChoice] || 0;
+  const extraBonus = 1 + (Number(hit.extraDmgPercent) || 0) / 100;
+  const reactionBonusFrac = (Number(hit.reactionBonusPercent) || 0) / 100;
+
+  let baseBeforeMultipliers = statValue * multiplier;
+
+  const kind = reactionKind(hit.reaction);
+
+  // Aditiva (Agravar/Propagar): soma um bônus fixo ANTES de crítico/DEF/RES.
+  if (kind === 'additive'){
+    const coef = ADDITIVE[hit.reaction].coef;
+    const additive = coef * reactionLevelMultiplier(charLevel) * (1 + emBonusAdditive(em) + reactionBonusFrac);
+    baseBeforeMultipliers += additive;
+  }
+
+  const crit = critMultiplier(stats, globals.critMode);
+  const def = defMultiplier(charLevel, globals.enemyLevel);
+  const res = resMultiplier(globals.enemyRes);
+
+  let hitDmg = baseBeforeMultipliers * crit * def * res * extraBonus;
+
+  // Amplificação (Vaporizar/Derreter): multiplica o golpe inteiro por cima.
+  if (kind === 'amplifying'){
+    const amp = AMPLIFYING[hit.reaction];
+    hitDmg *= amp.mult * (1 + emBonusAmplifying(em) + reactionBonusFrac);
+  }
+
+  // Transformativa: dano à parte — não crita, ignora DEF, só sofre RES.
+  let reactionDmg = 0;
+  if (kind === 'transformative'){
+    const coef = TRANSFORMATIVE[hit.reaction].coef;
+    reactionDmg = coef * reactionLevelMultiplier(charLevel) * (1 + emBonusTransformative(em) + reactionBonusFrac) * res;
+  }
+
+  return { hit: hitDmg, reaction: reactionDmg, total: hitDmg + reactionDmg };
+}
+
+function calcSlotTotal(slot, globals){
+  if (!slot || !slot.hits) return 0;
+  return slot.hits.reduce((sum, h) => sum + calcHitDamage(h, slot.row, globals).total, 0);
+}
+
+/* ---------------- UI ---------------- */
 
 function imageFor(characterName){
   const c = CHAR_CATALOG.find(c => c.name === characterName);
@@ -23,53 +181,6 @@ async function getTalentsFor(characterName){
   return talents;
 }
 
-// DEF multiplier padrão do jogo: (NívelPersonagem + 100) / (NívelPersonagem + 100 + NívelInimigo + 100)
-function defMultiplier(charLevel, enemyLevel){
-  const cl = Number(charLevel) || 90;
-  const el = Number(enemyLevel) || 100;
-  return (cl + 100) / (cl + 100 + el + 100);
-}
-
-// RES multiplier padrão do jogo (RES em fração, ex: 0.1 = 10%)
-function resMultiplier(resPercent){
-  const res = (Number(resPercent) || 0) / 100;
-  if (res < 0) return 1 - res / 2;
-  if (res < 0.5) return 1 - res;
-  return 1 / (1 + 4 * res);
-}
-
-function critMultiplier(stats, mode){
-  if (!stats) return 1;
-  const rate = Math.min(1, (stats.critRate || 0) / 100);
-  const dmg = (stats.critDmg || 0) / 100;
-  if (mode === 'always') return 1 + dmg;
-  if (mode === 'never') return 1;
-  return 1 + rate * dmg; // média
-}
-
-function calcSlotDamage(slot, globals){
-  if (!slot || !slot.talent || slot.levelIdx === null || slot.levelIdx === undefined) return 0;
-  const level = slot.talent.levels[slot.levelIdx];
-  if (!level || !level.params || !level.params.length) return 0;
-
-  const multiplier = Number(level.params[0]) || 0; // primeiro parâmetro = % de dano na maioria dos talentos
-  const statValue = (slot.row.stats && slot.row.stats[slot.statChoice]) || 0;
-
-  const base = statValue * multiplier;
-  const crit = critMultiplier(slot.row.stats, globals.critMode);
-  const def = defMultiplier(slot.row.characterLevel, globals.enemyLevel);
-  const res = resMultiplier(globals.enemyRes);
-  const bonus = 1 + (Number(slot.extraDmgPercent) || 0) / 100;
-
-  return base * crit * def * res * bonus;
-}
-
-function renderTeamTotal(globals){
-  let total = 0;
-  TEAM.forEach(slot => { total += calcSlotDamage(slot, globals); });
-  document.getElementById('teamTotal').textContent = Math.round(total).toLocaleString('pt-BR');
-}
-
 function currentGlobals(){
   return {
     enemyLevel: document.getElementById('enemyLevel').value,
@@ -81,6 +192,63 @@ function currentGlobals(){
 function availableCharsFor(slotIdx){
   const usedElsewhere = new Set(TEAM.map((s,i)=> i!==slotIdx && s ? s.row.character_name : null).filter(Boolean));
   return MY_CHARS.filter(r => !usedElsewhere.has(r.character_name));
+}
+
+function defaultHit(talents){
+  const talent = talents && talents.length ? talents[0] : null;
+  return {
+    talentIdx: talent ? 0 : null,
+    talent,
+    levelIdx: talent ? Math.min(8, talent.levels.length - 1) : null,
+    statChoice: 'atk',
+    extraDmgPercent: 0,
+    reaction: 'nenhuma',
+    reactionBonusPercent: 0,
+  };
+}
+
+function renderHitHtml(slotIdx, hitIdx, hit, talents, row, globals){
+  const r = calcHitDamage(hit, row, globals);
+  return `
+    <div class="talent-row" style="border-top:1px solid var(--line); padding-top:10px; margin-top:10px;" data-hit="${hitIdx}">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <label style="margin-bottom:0;">Golpe ${hitIdx+1}</label>
+        <button type="button" class="btn-remove remove-hit" data-slot="${slotIdx}" data-hit="${hitIdx}" title="Remover golpe" style="width:24px;height:24px;font-size:12px;">×</button>
+      </div>
+      <select class="talent-select" data-slot="${slotIdx}" data-hit="${hitIdx}">
+        ${talents.map((t,i)=> `<option value="${i}" ${hit.talentIdx===i?'selected':''}>${t.typeLabel} — ${t.name}</option>`).join('')}
+      </select>
+      <div class="mini-row" style="margin-top:6px;">
+        <select class="level-select" data-slot="${slotIdx}" data-hit="${hitIdx}">
+          ${hit.talent ? hit.talent.levels.map((lv,i)=> `<option value="${i}" ${hit.levelIdx===i?'selected':''}>Lv. ${lv.level}</option>`).join('') : ''}
+        </select>
+        <select class="stat-select" data-slot="${slotIdx}" data-hit="${hitIdx}">
+          <option value="atk" ${hit.statChoice==='atk'?'selected':''}>ATQ</option>
+          <option value="hp" ${hit.statChoice==='hp'?'selected':''}>HP</option>
+          <option value="def" ${hit.statChoice==='def'?'selected':''}>DEF</option>
+        </select>
+      </div>
+      <div style="margin-top:6px;">
+        <select class="reaction-select" data-slot="${slotIdx}" data-hit="${hitIdx}" style="width:100%;">
+          ${reactionOptionsHtml(hit.reaction)}
+        </select>
+      </div>
+      <div class="mini-row" style="margin-top:6px;">
+        <div>
+          <label style="font-size:9.5px;">Bônus dano extra (%)</label>
+          <input type="number" class="extra-dmg" data-slot="${slotIdx}" data-hit="${hitIdx}" value="${hit.extraDmgPercent||0}" step="1">
+        </div>
+        <div>
+          <label style="font-size:9.5px;">Bônus de reação (%)</label>
+          <input type="number" class="reaction-bonus" data-slot="${slotIdx}" data-hit="${hitIdx}" value="${hit.reactionBonusPercent||0}" step="1">
+        </div>
+      </div>
+      <div class="dmg-result">
+        <div class="num">${Math.round(r.total).toLocaleString('pt-BR')}</div>
+        <div class="lbl">${r.reaction > 0 ? `golpe ${Math.round(r.hit).toLocaleString('pt-BR')} + reação ${Math.round(r.reaction).toLocaleString('pt-BR')}` : 'dano estimado'}</div>
+      </div>
+    </div>
+  `;
 }
 
 async function renderSlot(slotIdx){
@@ -102,54 +270,28 @@ async function renderSlot(slotIdx){
         ${img ? `<img src="${img}">` : ''}
         <div>
           <b>${slot.row.character_name}</b><br>
-          <span class="hint">C${slot.row.constellation} · ${slot.row.weapon ? slot.row.weapon.name : 'sem arma salva'}</span>
+          <span class="hint">C${slot.row.constellation} · ${slot.row.weapon ? slot.row.weapon.name : 'sem arma salva'} · Lv.${slot.row.characterLevel || '?'}</span>
         </div>
       </div>
     `;
 
     if (!slot.row.stats){
-      html += `<p class="hint" style="margin-top:8px;">Esse personagem não tem status salvos ainda — reconecte o UID no Perfil pra trazer os status finais.</p>`;
+      html += `<p class="hint" style="margin-top:8px;">Esse personagem não tem status salvos ainda — reconecte o UID no Perfil pra trazer os status finais (inclusive Proficiência Elemental).</p>`;
     } else if (slot.loadingTalents){
       html += `<p class="hint" style="margin-top:8px;">Carregando talentos...</p>`;
     } else if (slot.talentError){
       html += `<p class="hint" style="margin-top:8px; color:var(--danger);">${slot.talentError}</p>`;
     } else if (slot.talents && slot.talents.length){
-      html += `<div class="talent-row"><label>Talento</label>
-        <select class="talent-select" data-slot="${slotIdx}">
-          ${slot.talents.map((t,i)=> `<option value="${i}" ${slot.talentIdx===i?'selected':''}>${t.typeLabel} — ${t.name}</option>`).join('')}
-        </select>
+      slot.hits.forEach((hit, hitIdx) => {
+        html += renderHitHtml(slotIdx, hitIdx, hit, slot.talents, slot.row, globals);
+      });
+      html += `<button type="button" class="btn btn-ghost add-hit" data-slot="${slotIdx}" style="width:100%; margin-top:10px; padding:8px; font-size:11px;" ${slot.hits.length>=MAX_HITS_PER_SLOT?'disabled':''}>+ Adicionar golpe à rotação</button>`;
+
+      const slotTotal = calcSlotTotal(slot, globals);
+      html += `<div class="dmg-result" style="margin-top:10px; border-color:var(--gold-bright);">
+        <div class="num">${Math.round(slotTotal).toLocaleString('pt-BR')}</div>
+        <div class="lbl">total da rotação desse personagem (${slot.hits.length} golpe${slot.hits.length>1?'s':''})</div>
       </div>`;
-
-      if (slot.talent){
-        html += `<div class="mini-row talent-row">
-          <div>
-            <label>Nível do talento</label>
-            <select class="level-select" data-slot="${slotIdx}">
-              ${slot.talent.levels.map((lv,i)=> `<option value="${i}" ${slot.levelIdx===i?'selected':''}>Lv. ${lv.level}</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <label>Status usado</label>
-            <select class="stat-select" data-slot="${slotIdx}">
-              <option value="atk" ${slot.statChoice==='atk'?'selected':''}>ATQ</option>
-              <option value="hp" ${slot.statChoice==='hp'?'selected':''}>HP</option>
-              <option value="def" ${slot.statChoice==='def'?'selected':''}>DEF</option>
-            </select>
-          </div>
-        </div>
-        <div class="talent-row">
-          <label>Bônus de dano extra (%) — ex: talento/constelação que não está no status</label>
-          <input type="number" class="extra-dmg" data-slot="${slotIdx}" value="${slot.extraDmgPercent||0}" step="1">
-        </div>`;
-
-        const lvl = slot.talent.levels[slot.levelIdx];
-        if (lvl){
-          html += `<div class="dmg-result">
-            <div class="num">${Math.round(calcSlotDamage(slot, globals)).toLocaleString('pt-BR')}</div>
-            <div class="lbl">dano estimado (1 acerto)</div>
-          </div>`;
-        }
-      }
     } else {
       html += `<p class="hint" style="margin-top:8px;">Nenhum talento com escala de dano encontrado pra esse personagem.</p>`;
     }
@@ -158,6 +300,12 @@ async function renderSlot(slotIdx){
   }
 
   el.innerHTML = html;
+}
+
+function renderTeamTotal(globals){
+  let total = 0;
+  TEAM.forEach(slot => { total += calcSlotTotal(slot, globals); });
+  document.getElementById('teamTotal').textContent = Math.round(total).toLocaleString('pt-BR');
 }
 
 function renderAllSlots(){
@@ -175,11 +323,7 @@ async function onPickCharacter(slotIdx, characterName){
   TEAM[slotIdx] = {
     row,
     talents: null,
-    talent: null,
-    talentIdx: null,
-    levelIdx: null,
-    statChoice: 'atk',
-    extraDmgPercent: 0,
+    hits: [],
     loadingTalents: true,
     talentError: null,
   };
@@ -191,11 +335,7 @@ async function onPickCharacter(slotIdx, characterName){
     if (!slot || slot.row.character_name !== characterName) return; // usuário trocou antes de terminar
     slot.talents = talents;
     slot.loadingTalents = false;
-    if (talents.length){
-      slot.talentIdx = 0;
-      slot.talent = talents[0];
-      slot.levelIdx = Math.min(8, talents[0].levels.length - 1); // nível "médio" como padrão
-    }
+    if (talents.length) slot.hits = [defaultHit(talents)];
   } catch(e){
     const slot = TEAM[slotIdx];
     if (slot) { slot.loadingTalents = false; slot.talentError = e.message; }
@@ -232,33 +372,60 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   renderAllSlots();
 
+  grid.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t.classList.contains('add-hit')){
+      const slotIdx = Number(t.dataset.slot);
+      const slot = TEAM[slotIdx];
+      if (slot && slot.hits.length < MAX_HITS_PER_SLOT){
+        slot.hits.push(defaultHit(slot.talents));
+        renderAllSlots();
+      }
+    } else if (t.classList.contains('remove-hit')){
+      const slotIdx = Number(t.dataset.slot);
+      const hitIdx = Number(t.dataset.hit);
+      const slot = TEAM[slotIdx];
+      if (slot && slot.hits.length > 1){
+        slot.hits.splice(hitIdx, 1);
+        renderAllSlots();
+      }
+    }
+  });
+
   grid.addEventListener('change', async (e) => {
     const t = e.target;
     const slotIdx = Number(t.dataset.slot);
     if (isNaN(slotIdx)) return;
     const slot = TEAM[slotIdx];
+    const hitIdx = Number(t.dataset.hit);
+    const hit = slot && slot.hits && !isNaN(hitIdx) ? slot.hits[hitIdx] : null;
 
     if (t.classList.contains('slot-select')){
       await onPickCharacter(slotIdx, t.value);
-    } else if (t.classList.contains('talent-select') && slot){
-      slot.talentIdx = Number(t.value);
-      slot.talent = slot.talents[slot.talentIdx];
-      slot.levelIdx = Math.min(8, slot.talent.levels.length - 1);
+    } else if (t.classList.contains('talent-select') && hit){
+      hit.talentIdx = Number(t.value);
+      hit.talent = slot.talents[hit.talentIdx];
+      hit.levelIdx = Math.min(8, hit.talent.levels.length - 1);
       renderAllSlots();
-    } else if (t.classList.contains('level-select') && slot){
-      slot.levelIdx = Number(t.value);
+    } else if (t.classList.contains('level-select') && hit){
+      hit.levelIdx = Number(t.value);
       renderAllSlots();
-    } else if (t.classList.contains('stat-select') && slot){
-      slot.statChoice = t.value;
+    } else if (t.classList.contains('stat-select') && hit){
+      hit.statChoice = t.value;
       renderAllSlots();
-    } else if (t.classList.contains('extra-dmg') && slot){
-      slot.extraDmgPercent = Number(t.value) || 0;
+    } else if (t.classList.contains('reaction-select') && hit){
+      hit.reaction = t.value;
+      renderAllSlots();
+    } else if (t.classList.contains('extra-dmg') && hit){
+      hit.extraDmgPercent = Number(t.value) || 0;
+      renderAllSlots();
+    } else if (t.classList.contains('reaction-bonus') && hit){
+      hit.reactionBonusPercent = Number(t.value) || 0;
       renderAllSlots();
     }
   });
 
   ['enemyLevel','enemyRes','critMode'].forEach(id => {
-    document.getElementById(id).addEventListener('input', () => renderAllSlots());
     document.getElementById(id).addEventListener('change', () => renderAllSlots());
   });
 });
