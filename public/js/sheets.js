@@ -8,6 +8,11 @@ const WEAPON_LEVELS = [1,2,3,4,5];
 
 let CHARACTERS = [];
 let WEAPONS = [];
+// Mapas por id — usados pra resolver o item completo (nome, imagem, custos)
+// a partir só do id salvo no pool do draft (ver buildInitialEstado), assim
+// a gente não duplica o catálogo inteiro dentro do EstadoJSON da partida.
+let CHAR_BY_ID = {};
+let WEAPON_BY_ID = {};
 
 /* ===================== SESSÃO / PARTIDA ===================== */
 let ME = null;            // {id, email, username, isAdmin}
@@ -57,7 +62,11 @@ function cloneState(s){ return JSON.parse(JSON.stringify(s)); }
 function buildInitialEstado(cfg){
   return {
     phase: 'characters',
-    pool: { characters: CHARACTERS.map(c=>({...c})), weapons: WEAPONS.map(w=>({...w})) },
+    // Só os ids ficam salvos no estado da partida (não o catálogo inteiro
+    // com nome/imagem/custos de cada item) — cada item já some da lista
+    // conforme é escolhido. Isso evita estourar o limite de 50.000
+    // caracteres por célula da planilha quando o EstadoJSON é salvo.
+    pool: { characters: CHARACTERS.map(c=>c.id), weapons: WEAPONS.map(w=>w.id) },
     players: [
       {points:cfg.budget, picksChar:[], picksWeapon:[], fiveStar:0},
       {points:cfg.budget, picksChar:[], picksWeapon:[], fiveStar:0}
@@ -97,9 +106,11 @@ function levelLabelFor(phase, level){
 
 function applyPick(estado, playerIdx, itemId, level){
   const poolKey = estado.phase==='weapons' ? 'weapons' : 'characters';
-  const idx = estado.pool[poolKey].findIndex(i=>i.id===itemId);
+  const byId = estado.phase==='weapons' ? WEAPON_BY_ID : CHAR_BY_ID;
+  const idx = estado.pool[poolKey].indexOf(itemId);
   if(idx===-1) throw new Error('Item não encontrado.');
-  const item = estado.pool[poolKey][idx];
+  const item = byId[itemId];
+  if(!item) throw new Error('Item não encontrado no catálogo.');
   const levelKey = levelKeyFor(estado.phase, level);
   const cost = item.costs[levelKey];
   if(cost === undefined) throw new Error('Nível inválido.');
@@ -126,7 +137,11 @@ function applySkip(estado, playerIdx){
 
 /* ===================== RENDER ===================== */
 function rarityClass(r){ return r>=5?'r5': r===4?'r4':'r3'; }
-function currentPool(){ return ST.phase==='weapons' ? ST.pool.weapons : ST.pool.characters; }
+function currentPool(){
+  const ids = ST.phase==='weapons' ? ST.pool.weapons : ST.pool.characters;
+  const byId = ST.phase==='weapons' ? WEAPON_BY_ID : CHAR_BY_ID;
+  return ids.map(id => byId[id]).filter(Boolean);
+}
 
 function imgTag(it, size){
   if(!it.image) return '';
@@ -313,9 +328,11 @@ async function makePick(itemId, level){
   if(activePlayer !== myPlayerIndex) return;
 
   const poolKey = ST.phase==='weapons' ? 'weapons' : 'characters';
-  const idx = ST.pool[poolKey].findIndex(i=>i.id===itemId);
+  const byId = ST.phase==='weapons' ? WEAPON_BY_ID : CHAR_BY_ID;
+  const idx = ST.pool[poolKey].indexOf(itemId);
   if(idx===-1) return;
-  const item = ST.pool[poolKey][idx];
+  const item = byId[itemId];
+  if(!item) return;
   const cost = item.costs[levelKeyFor(ST.phase, level)];
   if(cost === undefined) return;
   if(cost > ST.players[activePlayer].points) return;
@@ -573,6 +590,8 @@ document.getElementById('restartBtn')?.addEventListener('click', ()=>{
 async function boot(){
   try{
     [CHARACTERS, WEAPONS] = await Promise.all([loadCharacters(), loadWeapons()]);
+    CHAR_BY_ID = Object.fromEntries(CHARACTERS.map(c => [c.id, c]));
+    WEAPON_BY_ID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
   } catch(e){
     showOnly('loadError');
     document.getElementById('loadErrorText').textContent = 'Erro ao carregar a planilha: ' + e.message;
