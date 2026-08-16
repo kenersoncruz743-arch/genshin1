@@ -17,6 +17,34 @@ let MY_CHARS = [];
 let CHAR_CATALOG = [];
 let TEAM = new Array(TEAM_SIZE).fill(null);
 const TALENTS_CACHE = {}; // characterName -> talents[]
+const DPS_SLOT = 0; // Slot 1 (primeiro slot) é sempre o DPS — recebe os buffs do time inteiro
+let DPS_ACTIVE_BUFFS = new Set(); // chaves "id:ownerSlot" dos buffs de set marcados como ativos
+let DPS_SEEN_BUFFS = new Set(); // chaves já vistas, pra não reaplicar o padrão toda hora e respeitar o toggle manual do usuário
+
+// Mantém DPS_ACTIVE_BUFFS em sincronia com o que está de fato equipado no
+// time agora — na primeira vez que um buff aparece, aplica o padrão dele
+// (defaultOn); depois disso respeita o que o usuário marcou/desmarcou.
+// Remove buffs que sumiram (ex: trocou de personagem/set no slot).
+function syncBuffState(){
+  const detected = detectTeamSetBuffs(TEAM);
+  const validKeys = new Set(detected.map(b => b.id + ':' + b.ownerSlot));
+  for (const key of Array.from(DPS_ACTIVE_BUFFS)) {
+    if (!validKeys.has(key)) DPS_ACTIVE_BUFFS.delete(key);
+  }
+  for (const key of Array.from(DPS_SEEN_BUFFS)) {
+    if (!validKeys.has(key)) DPS_SEEN_BUFFS.delete(key);
+  }
+  detected.forEach(b => {
+    const key = b.id + ':' + b.ownerSlot;
+    if (!DPS_SEEN_BUFFS.has(key)) {
+      DPS_SEEN_BUFFS.add(key);
+      if (b.defaultOn) DPS_ACTIVE_BUFFS.add(key);
+    }
+  });
+  return detected;
+}
+
+
 
 /* ---------------- Constantes de reação (dados públicos do jogo) ---------------- */
 
@@ -160,7 +188,9 @@ function critMultiplier(stats, mode){
 // { hit, reaction, total } — "hit" é o dano do próprio golpe (já
 // multiplicado por Vaporizar/Derreter quando é o caso), "reaction" é o dano
 // à parte de uma reação Transformativa (0 se não houver), "total" é a soma.
-function calcHitDamage(hit, row, globals){
+// autoBuffs (opcional): só passado pro golpe do DPS (slot 1) — bônus
+// detectados automaticamente dos sets de artefato do time inteiro.
+function calcHitDamage(hit, row, globals, autoBuffs){
   if (!hit || !hit.talent || hit.levelIdx === null || hit.levelIdx === undefined) return { hit: 0, reaction: 0, total: 0 };
   const level = hit.talent.levels[hit.levelIdx];
   if (!level || !level.params || !level.params.length) return { hit: 0, reaction: 0, total: 0 };
@@ -170,11 +200,22 @@ function calcHitDamage(hit, row, globals){
   const em = Number(stats.em) || 0;
   const charLevel = row.characterLevel;
   const multiplier = Number(level.params[0]) || 0; // primeiro parâmetro = % de dano na maioria dos talentos
-  const statValue = stats[hit.statChoice] || 0;
+  // ATQ% de buff de time (ex: Noblesse Oblige 4pç) — só ajuda golpes que
+  // escalam em ATQ, e não duplica o que já está no status final da Enka.
+  const atkTeamBonusPercent = (autoBuffs && hit.statChoice === 'atk') ? (autoBuffs.atkPercentBonus || 0) : 0;
+  const statValue = (stats[hit.statChoice] || 0) * (1 + atkTeamBonusPercent / 100);
   const damageType = hit.damageType || autoDamageTypeFor(hit.talent);
-  const autoBonusPercent = autoDmgBonusPercent(stats, damageType);
-  const extraBonus = 1 + (autoBonusPercent + (Number(hit.extraDmgPercent) || 0)) / 100;
-  const reactionBonusFrac = (Number(hit.reactionBonusPercent) || 0) / 100;
+  const autoBuildBonusPercent = autoDmgBonusPercent(stats, damageType);
+  // Bônus de dano condicional dos sets de artefato do time (ex: 4pç
+  // Gladiator's Finale, 2pç Golden Troupe) — só entra pro talento certo.
+  const autoSetBonusPercent = (autoBuffs && hit.talent) ? (autoBuffs.extraDmgByTalentType[hit.talent.type] || 0) : 0;
+  const extraBonus = 1 + (autoBuildBonusPercent + autoSetBonusPercent + (Number(hit.extraDmgPercent) || 0)) / 100;
+  let reactionBonusFrac = (Number(hit.reactionBonusPercent) || 0) / 100;
+  if (autoBuffs && autoBuffs.reactionBonuses && hit.reaction){
+    autoBuffs.reactionBonuses.forEach(rb => {
+      if (rb.reactions.includes(hit.reaction)) reactionBonusFrac += rb.percent / 100;
+    });
+  }
 
   let baseBeforeMultipliers = statValue * multiplier;
 
@@ -189,7 +230,10 @@ function calcHitDamage(hit, row, globals){
 
   const crit = critMultiplier(stats, globals.critMode);
   const def = defMultiplier(charLevel, globals.enemyLevel);
-  const res = resMultiplier(globals.enemyRes);
+  // RES shred de time (ex: 4pç Viridescent Venerer/Deepwood Memories) — só
+  // se aplica a dano Elemental, nunca a dano Físico.
+  const resShredPercent = (autoBuffs && damageType === 'elemental') ? (autoBuffs.enemyResShredPercent || 0) : 0;
+  const res = resMultiplier((Number(globals.enemyRes) || 0) - resShredPercent);
 
   let hitDmg = baseBeforeMultipliers * crit * def * res * extraBonus;
 
@@ -209,9 +253,9 @@ function calcHitDamage(hit, row, globals){
   return { hit: hitDmg * repeats, reaction: reactionDmg * repeats, total: (hitDmg + reactionDmg) * repeats };
 }
 
-function calcSlotTotal(slot, globals){
+function calcSlotTotal(slot, globals, autoBuffs){
   if (!slot || !slot.hits) return 0;
-  return slot.hits.reduce((sum, h) => sum + calcHitDamage(h, slot.row, globals).total, 0);
+  return slot.hits.reduce((sum, h) => sum + calcHitDamage(h, slot.row, globals, autoBuffs).total, 0);
 }
 
 /* ---------------- UI ---------------- */
@@ -256,8 +300,9 @@ function defaultHit(talents, characterName){
   };
 }
 
-function renderHitHtml(slotIdx, hitIdx, hit, talents, row, globals){
-  const r = calcHitDamage(hit, row, globals);
+function renderHitHtml(slotIdx, hitIdx, hit, talents, row, globals, autoBuffs){
+  const r = calcHitDamage(hit, row, globals, autoBuffs);
+  const setBonusPercent = (autoBuffs && hit.talent) ? (autoBuffs.extraDmgByTalentType[hit.talent.type] || 0) : 0;
   return `
     <div class="talent-row" style="border-top:1px solid var(--line); padding-top:10px; margin-top:10px;" data-hit="${hitIdx}">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -290,6 +335,7 @@ function renderHitHtml(slotIdx, hitIdx, hit, talents, row, globals){
       </div>
       <p class="hint" style="margin-top:6px; font-size:10px;">
         Bônus de dano já aplicado automaticamente do seu build (cálice/sub-stats): <b>${autoDmgBonusPercent(row.stats, hit.damageType||autoDamageTypeFor(hit.talent)).toFixed(1)}%</b>
+        ${setBonusPercent ? `· bônus de set do time: <b>+${setBonusPercent}%</b>` : ''}
       </p>
       <div class="mini-row" style="margin-top:6px;">
         <div>
@@ -317,6 +363,7 @@ async function renderSlot(slotIdx){
   const el = document.getElementById('slot-' + slotIdx);
   const slot = TEAM[slotIdx];
   const globals = currentGlobals();
+  const autoBuffs = slotIdx === DPS_SLOT ? computeDpsAutoBuffs(TEAM, DPS_ACTIVE_BUFFS) : null;
 
   const options = ['<option value="">— vazio —</option>']
     .concat(availableCharsFor(slotIdx).map(r =>
@@ -324,6 +371,7 @@ async function renderSlot(slotIdx){
     ));
 
   let html = `<select class="slot-select" data-slot="${slotIdx}">${options.join('')}</select>`;
+  if (slotIdx === DPS_SLOT) html += `<div class="hint" style="margin-top:6px; font-size:10.5px; color:var(--gold-bright);">★ DPS — recebe os buffs de todo o time (veja abaixo)</div>`;
 
   if (slot){
     const img = imageFor(slot.row.character_name);
@@ -345,11 +393,11 @@ async function renderSlot(slotIdx){
       html += `<p class="hint" style="margin-top:8px; color:var(--danger);">${slot.talentError}</p>`;
     } else if (slot.talents && slot.talents.length){
       slot.hits.forEach((hit, hitIdx) => {
-        html += renderHitHtml(slotIdx, hitIdx, hit, slot.talents, slot.row, globals);
+        html += renderHitHtml(slotIdx, hitIdx, hit, slot.talents, slot.row, globals, autoBuffs);
       });
       html += `<button type="button" class="btn btn-ghost add-hit" data-slot="${slotIdx}" style="width:100%; margin-top:10px; padding:8px; font-size:11px;" ${slot.hits.length>=MAX_HITS_PER_SLOT?'disabled':''}>+ Adicionar golpe à rotação</button>`;
 
-      const slotTotal = calcSlotTotal(slot, globals);
+      const slotTotal = calcSlotTotal(slot, globals, autoBuffs);
       html += `<div class="dmg-result" style="margin-top:10px; border-color:var(--gold-bright);">
         <div class="num">${Math.round(slotTotal).toLocaleString('pt-BR')}</div>
         <div class="lbl">total da rotação desse personagem (${slot.hits.length} golpe${slot.hits.length>1?'s':''})</div>
@@ -364,14 +412,42 @@ async function renderSlot(slotIdx){
   el.innerHTML = html;
 }
 
+function renderBuffsPanel(){
+  const el = document.getElementById('buffsPanel');
+  if (!el) return;
+  const detected = syncBuffState();
+  if (!TEAM[DPS_SLOT] || !detected.length){
+    el.innerHTML = '';
+    return;
+  }
+  const rows = detected.map(b => {
+    const key = b.id + ':' + b.ownerSlot;
+    const ownerName = TEAM[b.ownerSlot] && TEAM[b.ownerSlot].row ? TEAM[b.ownerSlot].row.character_name : `Slot ${b.ownerSlot+1}`;
+    const checked = DPS_ACTIVE_BUFFS.has(key) ? 'checked' : '';
+    return `
+      <label style="display:flex; align-items:flex-start; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font-size:12px; cursor:pointer;">
+        <input type="checkbox" class="buff-toggle" data-key="${key}" ${checked} style="margin-top:3px;">
+        <span><b>${ownerName}</b> — ${b.label}</span>
+      </label>`;
+  }).join('');
+  el.innerHTML = `
+    <h3 class="font-display" style="font-size:15px; color:var(--gold-bright); margin:18px 0 4px;">Buffs do time detectados (aplicados no DPS — Slot 1)</h3>
+    <p class="hint" style="margin-bottom:6px;">Baseado nos sets de artefato equipados nos 4 personagens do time. Desmarque os que não estiverem ativos na sua rotação real (ex: efeitos que dependem de estar fora de campo, de ter usado a Habilidade há pouco, etc).</p>
+    ${rows}
+  `;
+}
+
 function renderTeamTotal(globals){
   let total = 0;
-  TEAM.forEach(slot => { total += calcSlotTotal(slot, globals); });
+  const autoBuffs = computeDpsAutoBuffs(TEAM, DPS_ACTIVE_BUFFS);
+  TEAM.forEach((slot, idx) => { total += calcSlotTotal(slot, globals, idx === DPS_SLOT ? autoBuffs : null); });
   document.getElementById('teamTotal').textContent = Math.round(total).toLocaleString('pt-BR');
 }
 
 function renderAllSlots(){
+  syncBuffState();
   for (let i=0;i<TEAM_SIZE;i++) renderSlot(i);
+  renderBuffsPanel();
   renderTeamTotal(currentGlobals());
 }
 
@@ -494,6 +570,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderAllSlots();
     }
   });
+
+  const buffsPanelEl = document.getElementById('buffsPanel');
+  if (buffsPanelEl){
+    buffsPanelEl.addEventListener('change', (e) => {
+      const t = e.target;
+      if (!t.classList.contains('buff-toggle')) return;
+      const key = t.dataset.key;
+      if (t.checked) DPS_ACTIVE_BUFFS.add(key); else DPS_ACTIVE_BUFFS.delete(key);
+      renderAllSlots();
+    });
+  }
 
   ['enemyLevel','enemyRes','critMode'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => renderAllSlots());
