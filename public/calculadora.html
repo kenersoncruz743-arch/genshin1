@@ -51,7 +51,7 @@
 
   <section id="calcBox" class="panel hidden">
     <h2 class="font-display" style="font-size:18px; color:var(--gold-bright); margin-bottom:6px;">Monte seu time</h2>
-    <p class="hint" style="margin-bottom:14px;">Escolha até 4 personagens salvos no seu Perfil. Pra cada um, monte a rotação (um ou mais golpes em sequência) escolhendo talento e nível — o app já detecta sozinho o status de escala (ATQ/HP/DEF), se o golpe é dano Físico ou Elemental, e aplica automaticamente o bônus de dano do seu cálice/sub-stats e a Proficiência Elemental (EM) salvos do personagem. Só escolha manualmente a reação elemental que o golpe dispara (isso depende da sua rotação, então não dá pra adivinhar sozinho).</p>
+    <p class="hint" style="margin-bottom:14px;">Escolha até 4 personagens salvos no seu Perfil. O <b>Slot 1 é sempre o DPS</b> — além do talento/nível de cada golpe, ele recebe automaticamente os status de escala certos (ATQ/HP/DEF), se o golpe é Físico ou Elemental, o bônus de dano do cálice/sub-stats, e os efeitos de dano dos sets de artefato equipados em qualquer um dos 4 personagens do time (ex: Noblesse Oblige, Gladiator's Finale, Golden Troupe). Só escolha manualmente a reação elemental de cada golpe (depende da sua rotação) e confira o painel de buffs pra desmarcar os que não estiverem ativos.</p>
 
     <div class="global-panel">
       <div class="field">
@@ -74,6 +74,8 @@
 
     <div class="team-grid" id="teamGrid"></div>
 
+    <div id="buffsPanel"></div>
+
     <div class="team-total">
       <div class="lbl hint">Dano total estimado da rotação do time</div>
       <div class="num" id="teamTotal">0</div>
@@ -87,21 +89,25 @@
       as fórmulas oficiais de reação elemental (Amplificação, Transformativa e Aditiva) e o status já salvo
       no seu Perfil. <b>Já entram automaticamente</b>: o status de escala certo pra cada talento (ATQ/HP/DEF —
       inclusive pra fujões do padrão como Noelle, Albedo, Xingqiu, Yelan, Kokomi e Nilou), se o golpe é dano
-      Físico ou Elemental, o bônus de dano correspondente do seu cálice/sub-stats, e a Proficiência Elemental
-      (EM) na hora de calcular cada reação. Use o campo "Nº de acertos" quando a habilidade golpeia mais de
-      uma vez (ex: normais multi-hit). <b>Ainda não entram automaticamente</b> (adicione manualmente em "Bônus
-      dano extra" ou "Bônus de reação" quando se aplicar): efeitos de sets de artefato (2pç/4pç), passivas de
-      arma e talentos passivos, e buffs de outros personagens do time — esses variam demais rotação a rotação
-      pra dar pra automatizar com segurança. Se algum golpe tiver infusão elemental (ex: Chongyun, espada
-      livre de Xiangling), troque manualmente o seletor "Físico/Elemental" desse golpe. O multiplicador de
-      nível usado pelas reações Transformativa/Aditiva é preciso pra personagens Lv.80 e Lv.90 (dados
-      confirmados) — pra outros níveis é uma extrapolação aproximada.
+      Físico ou Elemental, o bônus de dano correspondente do seu cálice/sub-stats, a Proficiência Elemental
+      (EM) na hora de calcular cada reação, e — só no <b>Slot 1 (DPS)</b> — os efeitos de dano condicionais dos
+      sets de artefato equipados em qualquer personagem do time (ex: 4pç Gladiator's Finale, 2pç/4pç Golden
+      Troupe, 4pç Noblesse Oblige no ATQ do time, RES shred de Viridescent Venerer/Deepwood Memories), listados
+      e ativáveis/desativáveis no painel "Buffs do time detectados" acima do total. Use o campo "Nº de acertos"
+      quando a habilidade golpeia mais de uma vez (ex: normais multi-hit). <b>Ainda não entram automaticamente</b>
+      (adicione manualmente em "Bônus dano extra" ou "Bônus de reação" quando se aplicar): passivas de arma,
+      talentos passivos do próprio personagem, e sets de artefato fora da lista já coberta acima — esses
+      exigem cadastro manual um a um, e vamos ampliando aos poucos. Se algum golpe tiver infusão elemental
+      (ex: Chongyun, espada livre de Xiangling), troque manualmente o seletor "Físico/Elemental" desse golpe.
+      O multiplicador de nível usado pelas reações Transformativa/Aditiva é preciso pra personagens Lv.80 e
+      Lv.90 (dados confirmados) — pra outros níveis é uma extrapolação aproximada.
     </div>
   </section>
 </div>
 
 <script src="js/config.js"></script>
 <script src="js/auth-client.js"></script>
+<script src="js/buffs.js"></script>
 <script src="js/calc.js"></script>
 </body>
 </html>
